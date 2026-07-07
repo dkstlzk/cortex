@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.schemas.agent import AgentRequest
+from backend.app.schemas.agent import AgentRequest
 
 router = APIRouter()
 

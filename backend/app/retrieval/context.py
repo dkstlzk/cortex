@@ -1,8 +1,8 @@
 from typing import List, Optional
 import os
 from openai import AsyncOpenAI
-from app.retrieval.models import TraversalContext, QueryType
-from app.db.queries import pg_facts
+from backend.app.retrieval.models import TraversalContext, QueryType
+from backend.app.db.queries import pg_facts
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
 EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT", "http://localhost:11434/v1")

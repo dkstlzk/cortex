@@ -3,9 +3,9 @@ import json
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.schemas.query import QueryRequest
-# from app.auth.jwt import get_current_user # To be implemented by P4/P1
-# from app.retrieval.orchestrator import retrieve_and_generate # To be implemented
+from backend.app.schemas.query import QueryRequest
+# from backend.app.auth.jwt import get_current_user # To be implemented by P4/P1
+# from backend.app.retrieval.orchestrator import retrieve_and_generate # To be implemented
 
 router = APIRouter()
 

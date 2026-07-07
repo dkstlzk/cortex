@@ -1,8 +1,8 @@
 import structlog
 import hashlib
 from typing import Any
+from functools import lru_cache
 from docling.chunking import HierarchicalChunker
-from docling_core.types.doc.document import DoclingDocument
 from backend.shared.services.parsing_service import ParsedDocument
 from backend.shared.exceptions import IngestionPipelineError
 
@@ -95,7 +95,6 @@ class ChunkingService:
 
 # Using an lru_cache-like dependency provider to ensure we don't recreate 
 # heavy chunkers for every job in the worker process.
-from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def get_chunking_service() -> ChunkingService:

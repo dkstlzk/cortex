@@ -1,5 +1,4 @@
 import structlog
-from typing import Any
 from backend.shared.services.embedding_service.provider import EmbeddingProvider
 from backend.shared.exceptions import InfrastructureError
 

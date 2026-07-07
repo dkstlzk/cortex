@@ -18,6 +18,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.32",
     "qdrant-client>=1.18.0",
     "rank-bm25>=0.2.2",
     "rapidfuzz>=3.14.5",
@@ -35,3 +36,7 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.15.20",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = [".."]
+testpaths = ["tests"]

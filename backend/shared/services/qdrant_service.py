@@ -1,6 +1,7 @@
 import uuid
 import structlog
 from typing import Any
+from functools import lru_cache
 from backend.shared.exceptions import InfrastructureError
 from backend.shared.config import settings
 
@@ -20,7 +21,6 @@ class QdrantService:
         if self._client is None:
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.http import models
                 
                 logger.info("Initializing Qdrant client", url=settings.QDRANT_URL)
                 self._client = QdrantClient(url=settings.QDRANT_URL)
@@ -121,8 +121,6 @@ class QdrantService:
         except Exception as e:
             logger.error("Qdrant upsert failed", document_id=document_id, error=str(e), exc_info=True)
             raise InfrastructureError(f"Failed to upsert to Qdrant: {str(e)}", service="Qdrant")
-
-from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def get_qdrant_service() -> QdrantService:

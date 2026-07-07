@@ -70,6 +70,8 @@ class UploadService:
             
         # 6. Database Insert (Commit as UPLOADED)
         from backend.shared.models.document import DocumentStatus
+        from sqlalchemy.exc import IntegrityError
+        
         document = self.repo.create(
             id=document_id,
             filename=file.filename or "unknown.pdf",
@@ -79,8 +81,36 @@ class UploadService:
             sha256=sha256,
             status=DocumentStatus.UPLOADED.value
         )
-        self.repo.db.commit() # Initial create commit is fine in service orchestration
-        logger.info("Document saved to Postgres", document_id=str(document_id), status="UPLOADED", sha256=sha256)
+        
+        try:
+            self.repo.db.commit() # Initial create commit is fine in service orchestration
+            logger.info("Document saved to Postgres", document_id=str(document_id), status="UPLOADED", sha256=sha256)
+        except IntegrityError as e:
+            self.repo.db.rollback()
+            
+            # Check specifically for the sha256 unique constraint
+            constraint_name = getattr(getattr(e, 'orig', None), 'diag', None) and getattr(e.orig.diag, 'constraint_name', None)
+            pgcode = getattr(getattr(e, 'orig', None), 'pgcode', None)
+            
+            is_sha256_duplicate = False
+            if constraint_name and 'sha256' in constraint_name:
+                is_sha256_duplicate = True
+            elif pgcode == '23505' and 'sha256' in str(e.orig).lower(): # Fallback if constraint_name isn't available
+                is_sha256_duplicate = True
+                
+            if is_sha256_duplicate:
+                logger.warning("Duplicate upload race condition caught", sha256=sha256)
+                self.cleanup.cleanup_failed_upload(document_id, "Duplicate SHA256 constraint violation")
+                raise DuplicateResourceError(f"Document with SHA256 {sha256} already exists.")
+            else:
+                logger.error("Database constraint violated during upload", error=str(e), exc_info=True)
+                self.cleanup.cleanup_failed_upload(document_id, "Database constraint violation")
+                raise InfrastructureError("Database constraint violation.", service="Postgres")
+        except Exception as e:
+            self.repo.db.rollback()
+            logger.error("Failed to commit document to DB, rolled back and delegating to cleanup", error=str(e), exc_info=True)
+            self.cleanup.cleanup_failed_upload(document_id, str(e))
+            raise InfrastructureError("Database failure during document upload.", service="Postgres")
         
         # 7. Redis Enqueue (Update to QUEUED on success)
         try:

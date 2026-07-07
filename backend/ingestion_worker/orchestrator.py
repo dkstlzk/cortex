@@ -1,6 +1,8 @@
 import structlog
 from rq import Queue
 from backend.shared.redis_client import get_queue
+from backend.shared.queue_config import get_default_retry
+from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -28,6 +30,8 @@ class PipelineOrchestrator:
                 "backend.ingestion_worker.embedding_jobs.process_embedding_job",
                 kwargs={"document_id": str(document_id)},
                 job_id=f"embed_{document_id}",
+                job_timeout=settings.RQ_EMBED_TIMEOUT,
+                retry=get_default_retry(),
                 result_ttl=86400
             )
             logger.info("Enqueued embedding job via orchestrator", document_id=document_id, job_id=job.id)

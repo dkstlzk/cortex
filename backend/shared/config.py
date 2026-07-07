@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "cortex_chunks"
     
+    # RQ Queue Configuration
+    RQ_DOC_PARSE_TIMEOUT: int = 300
+    RQ_EMBED_TIMEOUT: int = 180
+    RQ_RETRY_MAX: int = 3
+    RQ_RETRY_INTERVALS: str = "10,30,60"
+    
     # Redis & RQ Configuration
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

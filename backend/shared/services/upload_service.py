@@ -7,6 +7,8 @@ import structlog
 from backend.shared.storage import StorageManager, storage_manager
 from backend.shared.repositories.document_repository import DocumentRepository, get_document_repository
 from backend.shared.redis_client import get_queue
+from backend.shared.queue_config import get_default_retry
+from backend.shared.config import settings
 from backend.shared.exceptions import (
     ValidationFailedError,
     UnsupportedMediaTypeError,
@@ -87,6 +89,8 @@ class UploadService:
                     "stored_path": stored_path
                 },
                 job_id=f"ingest_{document_id}",
+                job_timeout=settings.RQ_DOC_PARSE_TIMEOUT,
+                retry=get_default_retry(),
                 result_ttl=86400 # Keep result for 24h
             )
             

@@ -3,10 +3,10 @@ from collections import Counter
 from itertools import combinations
 import math
 
-from app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
-from app.retrieval.context import assemble_context, embed
-from app.db.queries import qdrant_search, neo4j_neighbors, pg_facts
-from app.db.connection import neo4j_driver, pg_pool
+from backend.app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
+from backend.app.retrieval.context import assemble_context, embed
+from backend.app.db.queries import qdrant_search, neo4j_neighbors, pg_facts
+from backend.app.db.connection import neo4j_driver, pg_pool
 
 # --- Vector Pathway ---
 async def vector_pathway(query: str) -> List[Chunk]:

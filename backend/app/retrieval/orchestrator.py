@@ -1,10 +1,10 @@
 import asyncio
 from typing import List, Optional
 
-from app.retrieval.models import QueryType, Chunk
-from app.retrieval.context import mock_classify_query
-from app.retrieval.pathways import graph_pathway, vector_pathway, lexical_pathway
-from app.retrieval.fusion import FUSION_WEIGHTS, fuse, rerank
+from backend.app.retrieval.models import QueryType, Chunk
+from backend.app.retrieval.context import mock_classify_query
+from backend.app.retrieval.pathways import graph_pathway, vector_pathway, lexical_pathway
+from backend.app.retrieval.fusion import FUSION_WEIGHTS, fuse, rerank
 
 async def retrieve(
     query: str, query_type: QueryType, session_id: str, focused_tag: Optional[str] = None

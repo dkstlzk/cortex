@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Tuple
-from app.db.connection import qdrant_client, neo4j_driver, pg_pool
+from backend.app.db.connection import qdrant_client, neo4j_driver, pg_pool
 
 async def qdrant_search(query_embedding: List[float], top_k: int = 10) -> List[Dict[str, Any]]:
     # Assuming collection name is 'chunks'

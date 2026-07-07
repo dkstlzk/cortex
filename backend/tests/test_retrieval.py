@@ -1,10 +1,10 @@
 import pytest
 import asyncio
-from app.retrieval.context import assemble_context, mock_classify_query
-from app.retrieval.pathways import graph_pathway
-from app.retrieval.orchestrator import citations_resolve, generate_answer
-from app.retrieval.models import Chunk, QueryType
-from app.kg.shared_tools import context_graph_query
+from backend.app.retrieval.context import assemble_context, mock_classify_query
+from backend.app.retrieval.pathways import graph_pathway
+from backend.app.retrieval.orchestrator import citations_resolve, generate_answer
+from backend.app.retrieval.models import Chunk, QueryType
+from backend.app.kg.shared_tools import context_graph_query
 
 @pytest.mark.asyncio
 async def test_context_assembly():

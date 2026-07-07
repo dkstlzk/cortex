@@ -1,5 +1,5 @@
 from typing import List
-from app.retrieval.models import QueryType, Chunk
+from backend.app.retrieval.models import QueryType, Chunk
 
 # From Chapter 9 Table 9.5
 FUSION_WEIGHTS = {

@@ -1,1 +1,3 @@
-# cortex
+# CORTEX
+
+Industrial Knowledge Fabric

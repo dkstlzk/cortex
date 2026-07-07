@@ -30,10 +30,25 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "cortex_chunks"
     
+    # RQ Queue Configuration
+    RQ_DOC_PARSE_TIMEOUT: int = 300
+    RQ_EMBED_TIMEOUT: int = 180
+    RQ_RETRY_MAX: int = 3
+    RQ_RETRY_INTERVALS: str = "10,30,60"
+    
     # Redis & RQ Configuration
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    
+    # Embedding Configuration
+    EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5"
+    EMBEDDING_DIMENSION: int = 768
+    FASTEMBED_CACHE_DIR: str | None = None
+    
+    # Qdrant Specific
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_NAMESPACE_UUID: str = "12345678-1234-5678-1234-567812345678"
 
     
     # Storage Configuration

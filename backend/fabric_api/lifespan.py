@@ -1,5 +1,6 @@
 import structlog
 from contextlib import asynccontextmanager
+import time
 from fastapi import FastAPI
 
 from backend.shared.config import settings
@@ -29,10 +30,27 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to create upload directory", error=str(e))
         raise
 
-    # Verification check
-    neo4j_driver.verify_connectivity()
-    redis_conn.ping()
-    qdrant_client.get_collections()
+    def wait_for_dependency(dependency_func, name: str, max_retries: int = 5, initial_wait: int = 2):
+        for attempt in range(1, max_retries + 1):
+            try:
+                dependency_func()
+                logger.info(f"{name} is ready.")
+                return
+            except Exception as e:
+                if attempt == max_retries:
+                    logger.error(f"Failed to connect to {name}", attempt=attempt, error=type(e).__name__, exc_info=True)
+                    raise
+                wait_time = initial_wait * (2 ** (attempt - 1))
+                logger.warning(f"Waiting for {name}...", attempt=attempt, sleep=f"{wait_time}s", error=type(e).__name__)
+                time.sleep(wait_time)
+
+    from backend.shared.services.qdrant_service import get_qdrant_service
+    
+    # Verification check with independent retries
+    wait_for_dependency(redis_conn.ping, "Redis")
+    wait_for_dependency(neo4j_driver.verify_connectivity, "Neo4j")
+    wait_for_dependency(get_qdrant_service().bootstrap_collections, "Qdrant")
+    
     logger.info("Infrastructure clients verified and ready.")
 
     yield # Yield control to the FastAPI application

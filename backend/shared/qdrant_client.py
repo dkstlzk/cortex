@@ -6,16 +6,10 @@ from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)
 
-try:
-    qdrant_client = QdrantClient(
-        host=settings.QDRANT_HOST,
-        port=settings.QDRANT_PORT
-    )
-    qdrant_client.get_collections()
-    logger.info("Qdrant client initialized.")
-except Exception as e:
-    logger.error("Qdrant initialization failed", error=str(e))
-    raise
+qdrant_client = QdrantClient(
+    host=settings.QDRANT_HOST,
+    port=settings.QDRANT_PORT
+)
 
 def get_qdrant() -> Generator[QdrantClient, None, None]:
     """

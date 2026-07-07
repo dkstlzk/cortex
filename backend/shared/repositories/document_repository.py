@@ -98,6 +98,12 @@ class DocumentRepository:
             doc.status = status
             doc.error_message = error_message
 
+    def delete(self, document_id: str | uuid.UUID) -> None:
+        """Deletes a document from the database."""
+        doc = self.get_by_id(document_id)
+        if doc:
+            self.db.delete(doc)
+
 def get_document_repository(db: Session = Depends(get_db)) -> DocumentRepository:
     """
     Dependency provider for DocumentRepository.

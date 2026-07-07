@@ -6,6 +6,7 @@ import structlog
 
 from backend.shared.storage import StorageManager, storage_manager
 from backend.shared.repositories.document_repository import DocumentRepository, get_document_repository
+from backend.shared.services.cleanup_service import CleanupService, get_cleanup_service
 from backend.shared.redis_client import get_queue
 from backend.shared.queue_config import get_default_retry
 from backend.shared.config import settings
@@ -28,10 +29,11 @@ class UploadService:
     Orchestrates the document upload lifecycle: validation, storage, DB insertion, and enqueueing.
     """
     
-    def __init__(self, repo: DocumentRepository, storage: StorageManager, queue: Queue):
+    def __init__(self, repo: DocumentRepository, storage: StorageManager, queue: Queue, cleanup: CleanupService):
         self.repo = repo
         self.storage = storage
         self.queue = queue
+        self.cleanup = cleanup
 
     def process_upload(self, file: UploadFile) -> tuple[uuid.UUID, str, str]:
         """
@@ -116,19 +118,17 @@ class UploadService:
                 exc_info=True
             )
             
-            # Cleanup orphaned artifact directory
-            self.storage.delete_document_dir(document_id)
-            
-            self.repo.update_failure(document_id, error_message=str(e), status=DocumentStatus.FAILED.value)
-            self.repo.db.commit()
+            # Delegate to CleanupService
+            self.cleanup.cleanup_failed_upload(document_id, error_message=str(e))
             raise InfrastructureError(message="Failed to enqueue background job.", service="Redis")
 
 def get_upload_service(
     repo: DocumentRepository = Depends(get_document_repository),
-    queue: Queue = Depends(get_queue)
+    queue: Queue = Depends(get_queue),
+    cleanup: CleanupService = Depends(get_cleanup_service)
 ) -> UploadService:
     """
     Dependency provider for UploadService.
     StorageManager is used as a singleton module.
     """
-    return UploadService(repo, storage_manager, queue)
+    return UploadService(repo, storage_manager, queue, cleanup)

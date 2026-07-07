@@ -1,9 +1,19 @@
 from typing import List, Optional
+import os
+from openai import AsyncOpenAI
 from app.retrieval.models import TraversalContext, QueryType
+from app.db.queries import pg_facts
 
-# Mock dependencies
-async def mock_resolve_entities(text: str) -> List[str]:
-    # Extremely simple mock: just find known tags for Day 0
+FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
+EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT", "http://localhost:11434/v1")
+
+# We use the standard OpenAI client since it can point to any compliant endpoint
+openai_client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY or "dummy")
+embed_client = AsyncOpenAI(api_key="dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
+
+async def resolve_entities(text: str) -> List[str]:
+    # Very naive mock of entity resolution.
+    # In a real system, we would use an NER model or fuzzy match against entity_registry
     tags = []
     if "P-101A" in text:
         tags.append("P-101A")
@@ -11,36 +21,59 @@ async def mock_resolve_entities(text: str) -> List[str]:
         tags.append("P-101B")
     return tags
 
-async def mock_get_recent_messages(session_id: str, limit: int = 5) -> List[str]:
-    # Mock chat history
+async def get_recent_messages(session_id: str, limit: int = 5) -> List[str]:
+    # Mocking chat history fetch from DB for now
     return []
 
-async def mock_classify_query(query: str) -> QueryType:
+async def classify_query(query: str) -> QueryType:
     query_lower = query.lower()
-    if "why" in query_lower or "root cause" in query_lower or "keeps failing" in query_lower:
+    # Simple regex pre-filter as per architecture doc
+    if any(m in query_lower for m in ["why", "keeps failing", "root cause"]):
         return QueryType.DIAGNOSTIC
-    if "how do i" in query_lower or "steps to" in query_lower:
+    if any(m in query_lower for m in ["how do i", "steps to"]):
         return QueryType.PROCEDURAL
-    if "which" in query_lower or "compatible" in query_lower or "compare" in query_lower:
-        # Compositional queries are treated as OPEN for retrieval purposes
+    if any(m in query_lower for m in ["which", "compatible", "compare"]):
         return QueryType.OPEN
-    if "what" in query_lower or "when" in query_lower:
+    if any(m in query_lower for m in ["what", "when"]):
         return QueryType.FACTUAL
+        
+    # LLM fallback
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
+                {"role": "user", "content": query}
+            ],
+            max_tokens=10
+        )
+        cat = response.choices[0].message.content.strip().lower()
+        if cat in [e.value for e in QueryType]:
+            return QueryType(cat)
+    except Exception:
+        pass
+    
     return QueryType.OPEN
 
-async def mock_embed(text: str) -> List[float]:
-    # Mock embedding: just return a zero vector
-    return [0.0] * 384
+async def embed(text: str) -> List[float]:
+    try:
+        response = await embed_client.embeddings.create(
+            input=text,
+            model="text-embedding-3-small" # Or whatever model is at the endpoint
+        )
+        return response.data[0].embedding
+    except Exception:
+        return [0.0] * 384 # Fallback for local dev without endpoint
 
 async def assemble_context(
     query: str, session_id: str, focused_tag: Optional[str] = None
 ) -> TraversalContext:
-    explicit = await mock_resolve_entities(query)
+    explicit = await resolve_entities(query)
     
-    history_texts = await mock_get_recent_messages(session_id, limit=5)
+    history_texts = await get_recent_messages(session_id, limit=5)
     history_tags = set()
     for msg in history_texts:
-        history_tags.update(await mock_resolve_entities(msg))
+        history_tags.update(await resolve_entities(msg))
         
     implicit = list(history_tags - set(explicit))
     if focused_tag and focused_tag not in explicit:
@@ -49,6 +82,7 @@ async def assemble_context(
     return TraversalContext(
         explicit_tags=explicit,
         implicit_tags=implicit[:5],  # Cap to prevent context explosion
-        query_type=await mock_classify_query(query),
-        query_embedding=await mock_embed(query)
+        query_type=await classify_query(query),
+        query_embedding=await embed(query)
     )
+

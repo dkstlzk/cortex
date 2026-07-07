@@ -4,13 +4,14 @@ from itertools import combinations
 import math
 
 from app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
-from app.retrieval.context import assemble_context, mock_embed
-from app.db.fixtures import mock_qdrant_search, mock_neo4j_neighbors, mock_pg_facts
+from app.retrieval.context import assemble_context, embed
+from app.db.queries import qdrant_search, neo4j_neighbors, pg_facts
+from app.db.connection import neo4j_driver, pg_pool
 
 # --- Vector Pathway ---
 async def vector_pathway(query: str) -> List[Chunk]:
-    query_embedding = await mock_embed(query)
-    results = await mock_qdrant_search(query_embedding, top_k=20)
+    query_embedding = await embed(query)
+    results = await qdrant_search(query_embedding, top_k=20)
     chunks = []
     for r in results:
         chunks.append(Chunk(
@@ -24,16 +25,39 @@ async def vector_pathway(query: str) -> List[Chunk]:
 
 # --- Lexical Pathway ---
 async def lexical_pathway(query: str) -> List[Chunk]:
-    # Mocking Lexical search (FTS / BM25)
-    return []
+    # Real Lexical search (Postgres FTS)
+    sql = """
+        SELECT chunk_id, text, payload 
+        FROM chunks 
+        WHERE fts @@ plainto_tsquery('english', %s)
+        LIMIT 20
+    """
+    try:
+        async with pg_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql, (query,))
+                rows = await cur.fetchall()
+                chunks = []
+                for row in rows:
+                    chunks.append(Chunk(
+                        chunk_id=row[0],
+                        text=row[1],
+                        score=0.8, # Fallback BM25/FTS score, usually need rank_cd
+                        source="lexical",
+                        payload=row[2] or {}
+                    ))
+                return chunks
+    except Exception:
+        return []
 
 # --- Graph Pathway Components ---
 async def embedding_expand(query_embedding: List[float]) -> List[str]:
     # Strategy B - Embedding-Nearest Nodes
-    chunks = await mock_qdrant_search(query_embedding, top_k=10)
-    doc_ids = [c["payload"]["doc_id"] for c in chunks]
+    chunks = await qdrant_search(query_embedding, top_k=10)
+    doc_ids = [c["payload"].get("doc_id") for c in chunks if "doc_id" in c.get("payload", {})]
+    
     # Fetch distinct subject_tags from facts table for these doc_ids
-    facts = await mock_pg_facts(doc_ids)
+    facts = await pg_facts(doc_ids)
     tags = list(set([f["subject_tag"] for f in facts if "subject_tag" in f]))
     return tags
 
@@ -88,7 +112,7 @@ async def adaptive_traverse(
             continue
             
         # Mock node text/embedding
-        node_embedding = await mock_embed(tag) 
+        node_embedding = await embed(tag) 
         semantic_sim = cosine_similarity(query_embedding, node_embedding)
         
         node_score = 0.5 * parent_score * 0.7 + 0.5 * semantic_sim # DECAY_FACTOR = 0.7
@@ -98,7 +122,7 @@ async def adaptive_traverse(
             
         visited[tag] = ScoredNode(tag=tag, score=node_score, depth=depth)
         
-        neighbors = await mock_neo4j_neighbors(tag)
+        neighbors = await neo4j_neighbors(tag)
         for neighbor_tag, rel_type, confidence in neighbors:
             if neighbor_tag not in visited:
                 frontier.append((neighbor_tag, depth + 1, node_score * confidence))
@@ -106,16 +130,35 @@ async def adaptive_traverse(
     return sorted(visited.values(), key=lambda n: -n.score)
 
 async def find_bridge_nodes(explicit_tags: List[str], already_found: Set[str]) -> List[ScoredNode]:
-    # Mock implementation of Phase 4a (shortest paths)
     bridges = Counter()
-    for tag_a, tag_b in combinations(explicit_tags, 2):
-        # mock path finding
-        pass
-    return []
+    query = """
+    MATCH path = shortestPath((a {tag: $tag_a})-[*..6]-(b {tag: $tag_b}))
+    RETURN [n IN nodes(path) | n.tag] AS path_tags
+    """
+    async with neo4j_driver.session() as session:
+        for tag_a, tag_b in combinations(explicit_tags, 2):
+            result = await session.run(query, tag_a=tag_a, tag_b=tag_b)
+            record = await result.single()
+            if record and record["path_tags"]:
+                path_tags = record["path_tags"]
+                for tag in path_tags[1:-1]: # exclude endpoints
+                    bridges[tag] += 1
+                    
+    return [ScoredNode(tag=t, score=0.6, depth=3) for t, _ in bridges.most_common(10) if t not in already_found]
 
 async def detect_hubs(explicit_tags: List[str]) -> List[ScoredNode]:
-    # Mock implementation of Phase 4b (degree-based hubs)
-    return []
+    query = """
+    UNWIND $tags AS seed_tag
+    MATCH (seed {tag: seed_tag})-[*1..3]-(member)
+    WITH member, count(*) AS connections
+    WHERE connections >= 3
+    RETURN member.tag AS tag, labels(member)[0] AS entity_type, connections
+    ORDER BY connections DESC LIMIT 5
+    """
+    async with neo4j_driver.session() as session:
+        result = await session.run(query, tags=explicit_tags)
+        records = await result.data()
+        return [ScoredNode(tag=rec["tag"], score=0.7, depth=2, entity_type=rec["entity_type"] or "Unknown") for rec in records]
 
 async def get_node_edges(tag: str) -> List[Edge]:
     # Mock

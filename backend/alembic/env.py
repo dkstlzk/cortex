@@ -8,6 +8,7 @@ from alembic import context
 # Import settings and metadata
 from backend.shared.config import settings
 from backend.shared.database import Base
+from backend.shared.models import document  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

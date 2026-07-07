@@ -48,6 +48,33 @@ class DocumentRepository:
         # NOTE: We do not commit here. The Service layer is responsible for the transaction boundary.
         return document
 
+    def get_by_id(self, document_id: str | uuid.UUID) -> Document | None:
+        if isinstance(document_id, str):
+            document_id = uuid.UUID(document_id)
+        return self.db.query(Document).filter(Document.id == document_id).first()
+
+    def update_status(self, document_id: str | uuid.UUID, status: str) -> None:
+        """Updates just the status of a document."""
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = status
+
+    def update_parsing_results(self, document_id: str | uuid.UUID, parsed_text_path: str, page_count: int, chunk_count: int, status: str) -> None:
+        """Updates the parsed text path, page count, chunk count, and status."""
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.parsed_text_path = parsed_text_path
+            doc.page_count = page_count
+            doc.chunk_count = chunk_count
+            doc.status = status
+
+    def update_failure(self, document_id: str | uuid.UUID, error_message: str, status: str = "FAILED") -> None:
+        """Records a failure."""
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = status
+            doc.error_message = error_message
+
 def get_document_repository(db: Session = Depends(get_db)) -> DocumentRepository:
     """
     Dependency provider for DocumentRepository.

@@ -1,41 +1,92 @@
 import structlog
 from typing import Any
+import json
 
 from backend.shared.database import SessionLocal
 from backend.shared.repositories.document_repository import DocumentRepository
+from backend.shared.models.document import DocumentStatus
+from backend.shared.services.parsing_service import get_parsing_service
+from backend.shared.services.chunking_service import get_chunking_service
+from backend.shared.storage import storage_manager
+from backend.shared.exceptions import IngestionPipelineError
 
 logger = structlog.get_logger(__name__)
 
 def process_document_job(document_id: str, stored_path: str) -> dict[str, Any]:
     """
-    Entrypoint for RQ.
-    Currently only logs the received job payload and updates DB status to PROCESSING.
-    P1.3 will introduce actual parsing logic here.
+    Entrypoint for RQ worker.
+    Executes the Docling parsing pipeline, runs layout-aware chunking, and persists all artifacts.
     """
     logger.info("Starting document ingestion job", document_id=document_id, stored_path=stored_path)
     
     with SessionLocal() as db:
         repo = DocumentRepository(db)
+        parsing_service = get_parsing_service()
+        chunking_service = get_chunking_service()
         
-        # P1.3 NOTE: This will be moved into a dedicated service later.
-        # For now, we manually lookup and update the status to simulate job start.
-        doc = db.query(repo.db.get_bind().dialect.__module__).filter_by(id=document_id).first() # Dummy check
-        # Wait, the correct way is:
-        # doc = repo.db.query(Document).filter(Document.id == document_id).first()
-        # but since Document isn't imported here, let's just log.
-        # Let's import Document properly.
-        from backend.shared.models.document import Document
-        
-        doc = repo.db.query(Document).filter(Document.id == document_id).first()
-        if doc:
-            doc.status = "PROCESSING"
-            repo.db.commit()
-            logger.info("Document status updated to PROCESSING", document_id=document_id)
-        else:
+        # 1. Fetch document and update to PROCESSING
+        doc = repo.get_by_id(document_id)
+        if not doc:
             logger.error("Document not found in DB", document_id=document_id)
             raise ValueError(f"Document {document_id} not found")
             
-        # ... P1.3 Docling parsing goes here ...
+        repo.update_status(document_id, DocumentStatus.PROCESSING.value)
+        repo.db.commit()
+        logger.info("Document status updated to PROCESSING", document_id=document_id)
         
-    logger.info("Document ingestion job finished placeholder", document_id=document_id)
-    return {"status": "success", "document_id": document_id}
+        try:
+            # 2. Execute parsing
+            parsed_doc = parsing_service.parse_document(stored_path)
+            
+            # 3. Save Parsing Artifacts to Disk
+            parsed_md_path = storage_manager.save_artifact(document_id, "parsed.md", parsed_doc.markdown)
+            storage_manager.save_artifact(document_id, "metadata.json", json.dumps(parsed_doc.metadata, indent=2))
+            
+            # 4. Execute chunking
+            chunks = chunking_service.chunk_document(document_id, parsed_doc)
+            
+            # Free the massive Docling object early now that chunking is done
+            parsed_doc.docling_document = None
+            
+            # 5. Save Chunking Artifacts to Disk
+            storage_manager.save_artifact(document_id, "chunks.json", json.dumps(chunks, indent=2))
+            
+            # 6. Update DB to PARSED (End of ingestion pipeline)
+            repo.update_parsing_results(
+                document_id=document_id,
+                parsed_text_path=parsed_md_path,
+                page_count=parsed_doc.page_count,
+                chunk_count=len(chunks),
+                status=DocumentStatus.PARSED.value
+            )
+            repo.db.commit()
+            
+            logger.info("Document ingestion pipeline finished successfully", document_id=document_id, page_count=parsed_doc.page_count, chunk_count=len(chunks))
+            return {
+                "status": "success", 
+                "document_id": document_id, 
+                "page_count": parsed_doc.page_count,
+                "chunk_count": len(chunks)
+            }
+            
+        except IngestionPipelineError as e:
+            logger.error(
+                "Document parsing failed (Domain Error)", 
+                document_id=document_id, 
+                error=str(e),
+                exc_info=True
+            )
+            repo.update_failure(document_id, error_message=str(e), status=DocumentStatus.FAILED.value)
+            repo.db.commit()
+            raise e
+        except Exception as e:
+            logger.error(
+                "Document ingestion failed (Unexpected)", 
+                document_id=document_id, 
+                exception_type=type(e).__name__,
+                error=str(e),
+                exc_info=True
+            )
+            repo.update_failure(document_id, error_message=str(e), status=DocumentStatus.FAILED.value)
+            repo.db.commit()
+            raise IngestionPipelineError(message=f"Unexpected error: {str(e)}", stage="Worker Execution") from e

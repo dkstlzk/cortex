@@ -1,5 +1,6 @@
 import uuid
 from fastapi import UploadFile, Depends
+from pathlib import Path
 from rq import Queue
 import structlog
 
@@ -60,20 +61,21 @@ class UploadService:
         # 5. Check for duplicates
         existing_doc = self.repo.get_by_sha256(sha256)
         if existing_doc:
-            self.storage.delete_file(stored_path)
+            self.storage.delete_document_dir(document_id)
             raise DuplicateResourceError(f"Document with SHA256 {sha256} already exists.")
             
         # 6. Database Insert (Commit as UPLOADED)
+        from backend.shared.models.document import DocumentStatus
         document = self.repo.create(
             id=document_id,
             filename=file.filename or "unknown.pdf",
-            stored_filename=f"{document_id}.pdf",
+            stored_filename=f"original{Path(file.filename or '').suffix or '.pdf'}",
             mime_type=file.content_type,
             size_bytes=size_bytes,
             sha256=sha256,
-            status="UPLOADED"
+            status=DocumentStatus.UPLOADED.value
         )
-        self.repo.db.commit()
+        self.repo.db.commit() # Initial create commit is fine in service orchestration
         logger.info("Document saved to Postgres", document_id=str(document_id), status="UPLOADED", sha256=sha256)
         
         # 7. Redis Enqueue (Update to QUEUED on success)
@@ -89,9 +91,8 @@ class UploadService:
             )
             
             # Update status to QUEUED since enqueue succeeded
-            document.status = "QUEUED"
+            self.repo.update_status(document_id, DocumentStatus.QUEUED.value)
             self.repo.db.commit()
-            self.repo.db.refresh(document)
             
             logger.info(
                 "Enqueued ingestion job", 
@@ -111,10 +112,10 @@ class UploadService:
                 exc_info=True
             )
             
-            # Cleanup orphaned file from disk
-            self.storage.delete_file(stored_path)
+            # Cleanup orphaned artifact directory
+            self.storage.delete_document_dir(document_id)
             
-            document.status = "FAILED"
+            self.repo.update_failure(document_id, error_message=str(e), status=DocumentStatus.FAILED.value)
             self.repo.db.commit()
             raise InfrastructureError(message="Failed to enqueue background job.", service="Redis")
 

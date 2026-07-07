@@ -1,7 +1,7 @@
 import structlog
 from rq import Queue
 from backend.shared.redis_client import get_queue
-from backend.shared.queue_config import get_default_retry
+from backend.shared.rq_policy import get_default_retry
 from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)

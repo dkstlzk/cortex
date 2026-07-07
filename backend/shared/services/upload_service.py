@@ -8,7 +8,7 @@ from backend.shared.storage import StorageManager, storage_manager
 from backend.shared.repositories.document_repository import DocumentRepository, get_document_repository
 from backend.shared.services.cleanup_service import CleanupService, get_cleanup_service
 from backend.shared.redis_client import get_queue
-from backend.shared.queue_config import get_default_retry
+from backend.shared.rq_policy import get_default_retry
 from backend.shared.config import settings
 from backend.shared.exceptions import (
     ValidationFailedError,
@@ -126,16 +126,17 @@ class UploadService:
                 result_ttl=86400 # Keep result for 24h
             )
             
-            # Update status to QUEUED since enqueue succeeded
             self.repo.update_status(document_id, DocumentStatus.QUEUED.value)
             self.repo.db.commit()
             
+            import time
             logger.info(
-                "Enqueued ingestion job", 
+                "Document upload sequence completed successfully", 
                 document_id=str(document_id), 
-                job_id=job.id,
-                stored_path=stored_path,
-                sha256=sha256
+                job_id=job.id, 
+                status="QUEUED",
+                upload_duration_ms=int(time.time() * 1000), # placeholder for actual duration calculation
+                queue_wait_ms=0
             )
             return document.id, job.id, document.status
             

@@ -34,6 +34,18 @@ class CleanupService:
         except Exception as e:
             logger.error("Failed to clean up orphaned state", document_id=str(document_id), error=str(e), exc_info=True)
             self.repo.db.rollback()
+            
+    def cleanup_failed_parse(self, document_id: uuid.UUID | str, error_message: str):
+        """Stub: Recovery workflow for parsing failures."""
+        pass
+        
+    def cleanup_failed_embedding(self, document_id: uuid.UUID | str, error_message: str):
+        """Stub: Recovery workflow for embedding failures."""
+        pass
+        
+    def cleanup_orphan_artifacts(self):
+        """Stub: Cron-like workflow for orphan garbage collection."""
+        pass
 
 def get_cleanup_service(
     repo: DocumentRepository = Depends(get_document_repository)

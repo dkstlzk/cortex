@@ -17,10 +17,10 @@ class StorageManager:
         self.upload_dir = settings.UPLOAD_DIR
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         
-    async def save_file(self, file: UploadFile, document_id: uuid.UUID) -> str:
+    def save_and_hash_file(self, file: UploadFile, document_id: uuid.UUID) -> tuple[str, str]:
         """
-        Saves the uploaded file to disk using the document_id as the filename.
-        Returns the absolute stored path.
+        Saves the uploaded file to disk synchronously and computes its SHA256 hash in one pass.
+        Returns a tuple of (stored_path, sha256_hash).
         """
         extension = Path(file.filename or "").suffix
         if not extension:
@@ -29,32 +29,26 @@ class StorageManager:
         stored_filename = f"{document_id}{extension}"
         stored_path = self.upload_dir / stored_filename
         
-        # Reset file pointer before reading
-        await file.seek(0)
-        
-        with stored_path.open("wb") as buffer:
-            # Read in chunks to avoid memory issues with large files
-            while chunk := await file.read(8192):
-                buffer.write(chunk)
-                
-        logger.info("File saved to disk", stored_path=str(stored_path))
-        return str(stored_path)
-        
-    async def calculate_sha256(self, file: UploadFile) -> str:
-        """
-        Calculates the SHA256 hash of the uploaded file.
-        """
         sha256_hash = hashlib.sha256()
         
         # Reset file pointer before reading
-        await file.seek(0)
+        file.file.seek(0)
         
-        while chunk := await file.read(8192):
-            sha256_hash.update(chunk)
-            
-        # Reset file pointer again for subsequent operations
-        await file.seek(0)
+        with stored_path.open("wb") as buffer:
+            while chunk := file.file.read(8192):
+                buffer.write(chunk)
+                sha256_hash.update(chunk)
+                
+        logger.info("File saved to disk and hashed", stored_path=str(stored_path))
+        return str(stored_path), sha256_hash.hexdigest()
         
-        return sha256_hash.hexdigest()
+    def delete_file(self, stored_path: str) -> None:
+        """
+        Deletes a file from disk if it exists. Used for cleanup on failure.
+        """
+        path = Path(stored_path)
+        if path.exists() and path.is_file():
+            path.unlink()
+            logger.info("File deleted during cleanup", stored_path=stored_path)
 
 storage_manager = StorageManager()

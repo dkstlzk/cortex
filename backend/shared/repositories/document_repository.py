@@ -45,9 +45,7 @@ class DocumentRepository:
             status=status
         )
         self.db.add(document)
-        self.db.commit()
-        self.db.refresh(document)
-        logger.info("Document record created", document_id=str(document.id))
+        # NOTE: We do not commit here. The Service layer is responsible for the transaction boundary.
         return document
 
 def get_document_repository(db: Session = Depends(get_db)) -> DocumentRepository:

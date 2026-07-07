@@ -1,11 +1,18 @@
 import uuid
-from fastapi import UploadFile, HTTPException, Depends
+from fastapi import UploadFile, Depends
 from rq import Queue
 import structlog
 
 from backend.shared.storage import StorageManager, storage_manager
 from backend.shared.repositories.document_repository import DocumentRepository, get_document_repository
 from backend.shared.redis_client import get_queue
+from backend.shared.exceptions import (
+    ValidationFailedError,
+    UnsupportedMediaTypeError,
+    PayloadTooLargeError,
+    DuplicateResourceError,
+    InfrastructureError
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -23,41 +30,40 @@ class UploadService:
         self.storage = storage
         self.queue = queue
 
-    async def process_upload(self, file: UploadFile) -> tuple[uuid.UUID, str, str]:
+    def process_upload(self, file: UploadFile) -> tuple[uuid.UUID, str, str]:
         """
-        Processes an uploaded file.
+        Processes an uploaded file synchronously.
         Returns a tuple of (document_id, job_id, status).
         """
         # 1. Validate MIME type
         if file.content_type not in ALLOWED_MIME_TYPES:
-            raise HTTPException(status_code=415, detail="Unsupported media type. Only PDF is allowed.")
+            raise UnsupportedMediaTypeError("Unsupported media type. Only PDF is allowed.")
             
         # 2. Validate File Size
-        file.file.seek(0, 2)
-        size_bytes = file.file.tell()
-        file.file.seek(0)
+        # Note: UploadFile.size is populated by Starlette but may not be accurate depending 
+        # on the proxy/client headers. For production, it's safer to check size during streaming.
+        # For MVP, this is acceptable.
+        size_bytes = file.size
         
+        if size_bytes is None or size_bytes == 0:
+            raise ValidationFailedError("Empty file uploaded.")
+            
         if size_bytes > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail=f"Payload too large. Max size is {MAX_FILE_SIZE} bytes.")
+            raise PayloadTooLargeError(f"Payload too large. Max size is {MAX_FILE_SIZE} bytes.")
             
-        if size_bytes == 0:
-            raise HTTPException(status_code=400, detail="Empty file uploaded.")
-            
-        # 3. Calculate SHA256
-        sha256 = await self.storage.calculate_sha256(file)
-        
-        # Check for duplicates
-        existing_doc = self.repo.get_by_sha256(sha256)
-        if existing_doc:
-            raise HTTPException(status_code=409, detail=f"Document with SHA256 {sha256} already exists.")
-            
-        # 4. Generate UUID
+        # 3. Generate UUID
         document_id = uuid.uuid4()
         
-        # 5. Save file
-        stored_path = await self.storage.save_file(file, document_id)
+        # 4. Save and hash file simultaneously
+        stored_path, sha256 = self.storage.save_and_hash_file(file, document_id)
         
-        # 6. Insert Postgres
+        # 5. Check for duplicates
+        existing_doc = self.repo.get_by_sha256(sha256)
+        if existing_doc:
+            self.storage.delete_file(stored_path)
+            raise DuplicateResourceError(f"Document with SHA256 {sha256} already exists.")
+            
+        # 6. Database Insert (Commit as UPLOADED)
         document = self.repo.create(
             id=document_id,
             filename=file.filename or "unknown.pdf",
@@ -65,22 +71,52 @@ class UploadService:
             mime_type=file.content_type,
             size_bytes=size_bytes,
             sha256=sha256,
-            status="QUEUED"
+            status="UPLOADED"
         )
+        self.repo.db.commit()
+        logger.info("Document saved to Postgres", document_id=str(document_id), status="UPLOADED", sha256=sha256)
         
-        # 7. Enqueue Redis Job
-        job = self.queue.enqueue(
-            "backend.ingestion_worker.jobs.process_document_job",
-            kwargs={
-                "document_id": str(document_id),
-                "stored_path": stored_path
-            },
-            job_id=f"ingest_{document_id}",
-            result_ttl=86400 # Keep result for 24h
-        )
-        logger.info("Enqueued ingestion job", document_id=str(document_id), job_id=job.id)
-        
-        return document.id, job.id, document.status
+        # 7. Redis Enqueue (Update to QUEUED on success)
+        try:
+            job = self.queue.enqueue(
+                "backend.ingestion_worker.jobs.process_document_job",
+                kwargs={
+                    "document_id": str(document_id),
+                    "stored_path": stored_path
+                },
+                job_id=f"ingest_{document_id}",
+                result_ttl=86400 # Keep result for 24h
+            )
+            
+            # Update status to QUEUED since enqueue succeeded
+            document.status = "QUEUED"
+            self.repo.db.commit()
+            self.repo.db.refresh(document)
+            
+            logger.info(
+                "Enqueued ingestion job", 
+                document_id=str(document_id), 
+                job_id=job.id,
+                stored_path=stored_path,
+                sha256=sha256
+            )
+            return document.id, job.id, document.status
+            
+        except Exception as e:
+            logger.error(
+                "Failed to enqueue background job", 
+                document_id=str(document_id), 
+                exception_type=type(e).__name__,
+                error=str(e),
+                exc_info=True
+            )
+            
+            # Cleanup orphaned file from disk
+            self.storage.delete_file(stored_path)
+            
+            document.status = "FAILED"
+            self.repo.db.commit()
+            raise InfrastructureError(message="Failed to enqueue background job.", service="Redis")
 
 def get_upload_service(
     repo: DocumentRepository = Depends(get_document_repository),

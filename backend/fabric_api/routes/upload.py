@@ -8,7 +8,7 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["Ingestion"])
 
 @router.post("/upload", response_model=UploadResponse, status_code=202)
-async def upload_document(
+def upload_document(
     file: UploadFile = File(...),
     upload_service: UploadService = Depends(get_upload_service)
 ):
@@ -18,7 +18,7 @@ async def upload_document(
     """
     logger.info("Upload request received", filename=file.filename)
     
-    document_id, job_id, status = await upload_service.process_upload(file)
+    document_id, job_id, status = upload_service.process_upload(file)
     
     return UploadResponse(
         document_id=document_id,

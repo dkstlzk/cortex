@@ -21,6 +21,21 @@ class ResourceNotFoundError(CortexError):
     def __init__(self, message: str):
         super().__init__(message, status_code=404)
 
+class DuplicateResourceError(CortexError):
+    """Raised when attempting to create a resource that already exists."""
+    def __init__(self, message: str):
+        super().__init__(message, status_code=409)
+
+class UnsupportedMediaTypeError(CortexError):
+    """Raised when an uploaded file has an unsupported MIME type."""
+    def __init__(self, message: str):
+        super().__init__(message, status_code=415)
+
+class PayloadTooLargeError(CortexError):
+    """Raised when an uploaded file exceeds the maximum allowed size."""
+    def __init__(self, message: str):
+        super().__init__(message, status_code=413)
+
 class ValidationFailedError(CortexError):
     """Raised when input payload, file format, or extraction schema is invalid."""
     def __init__(self, message: str):

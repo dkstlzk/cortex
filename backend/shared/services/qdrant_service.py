@@ -13,23 +13,16 @@ class QdrantService:
     payload mappings, and UUID conversions.
     """
     
-    def __init__(self, collection_name: str = "cortex_chunks"):
+    def __init__(self, client, collection_name: str = settings.QDRANT_COLLECTION):
+        self._client = client
         self.collection_name = collection_name
-        self._client = None
         
     def _get_client(self):
+        """
+        Returns the encapsulated Qdrant client.
+        """
         if self._client is None:
-            try:
-                from qdrant_client import QdrantClient
-                
-                logger.info("Initializing Qdrant client", url=settings.QDRANT_URL)
-                self._client = QdrantClient(url=settings.QDRANT_URL)
-                
-            except ImportError:
-                raise InfrastructureError("qdrant-client package is not installed.", service="Qdrant")
-            except Exception as e:
-                logger.error("Failed to initialize Qdrant client", error=str(e), exc_info=True)
-                raise InfrastructureError(f"Qdrant initialization failed: {str(e)}", service="Qdrant")
+            raise InfrastructureError("Qdrant client not provided to service.", service="Qdrant")
         return self._client
         
     def bootstrap_collections(self):
@@ -124,4 +117,5 @@ class QdrantService:
 
 @lru_cache(maxsize=1)
 def get_qdrant_service() -> QdrantService:
-    return QdrantService()
+    from backend.shared.qdrant_client import qdrant_client
+    return QdrantService(client=qdrant_client)

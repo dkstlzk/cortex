@@ -61,6 +61,10 @@ def process_document_job(document_id: str, stored_path: str) -> dict[str, Any]:
             )
             repo.db.commit()
             
+            # 7. Hand off to Orchestrator for next pipeline stage
+            from backend.ingestion_worker.orchestrator import pipeline_orchestrator
+            pipeline_orchestrator.enqueue_embedding(document_id)
+            
             logger.info("Document ingestion pipeline finished successfully", document_id=document_id, page_count=parsed_doc.page_count, chunk_count=len(chunks))
             return {
                 "status": "success", 

@@ -12,6 +12,8 @@ class DocumentStatus(str, Enum):
     PROCESSING = "PROCESSING"
     PARSED = "PARSED"
     EMBEDDING = "EMBEDDING"
+    EMBEDDED = "EMBEDDED"
+    INDEXING = "INDEXING"
     GRAPH_BUILDING = "GRAPH_BUILDING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
@@ -30,6 +32,12 @@ class Document(Base):
     parsed_text_path: Mapped[str | None] = mapped_column(String, nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+    # Embedding metadata
+    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    embedding_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

@@ -68,6 +68,29 @@ class DocumentRepository:
             doc.chunk_count = chunk_count
             doc.status = status
 
+    def mark_embedding_started(self, document_id: str | uuid.UUID) -> None:
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = "EMBEDDING"
+            
+    def mark_embedded(self, document_id: str | uuid.UUID, model_name: str, embedded_at) -> None:
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = "EMBEDDED"
+            doc.embedding_model = model_name
+            doc.embedded_at = embedded_at
+            
+    def mark_indexing(self, document_id: str | uuid.UUID) -> None:
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = "INDEXING"
+            
+    def mark_completed(self, document_id: str | uuid.UUID, embedding_time_ms: int) -> None:
+        doc = self.get_by_id(document_id)
+        if doc:
+            doc.status = "COMPLETED"
+            doc.embedding_time_ms = embedding_time_ms
+
     def update_failure(self, document_id: str | uuid.UUID, error_message: str, status: str = "FAILED") -> None:
         """Records a failure."""
         doc = self.get_by_id(document_id)

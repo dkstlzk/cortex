@@ -32,7 +32,10 @@ async def lifespan(app: FastAPI):
     # Verification check
     neo4j_driver.verify_connectivity()
     redis_conn.ping()
-    qdrant_client.get_collections()
+    
+    from backend.shared.services.qdrant_service import get_qdrant_service
+    get_qdrant_service().bootstrap_collections()
+    
     logger.info("Infrastructure clients verified and ready.")
 
     yield # Yield control to the FastAPI application

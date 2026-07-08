@@ -2,6 +2,7 @@ from typing import Optional, List, Any
 from backend.app.retrieval.models import QueryType, Chunk, GraphContext
 from backend.app.retrieval.pathways import graph_pathway
 
+# Knowledge graph retrieval tool exposed to P3.
 async def context_graph_query(
     tag: str, query: str, depth: str = "auto", include_analogues: bool = False
 ) -> GraphContext:

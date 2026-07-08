@@ -6,6 +6,7 @@ from backend.app.retrieval.context import mock_classify_query
 from backend.app.retrieval.pathways import graph_pathway, vector_pathway, lexical_pathway
 from backend.app.retrieval.fusion import FUSION_WEIGHTS, fuse, rerank
 
+# Public retrieval interface consumed by P3.
 async def retrieve(
     query: str, query_type: QueryType, session_id: str, focused_tag: Optional[str] = None
 ) -> RetrievalContext:
@@ -50,6 +51,9 @@ async def generate_answer(query: str, chunks: List[Chunk]) -> CitedAnswer:
         
     return self_check(draft, chunks)
 
+# DEPRECATED/INTERNAL
+# This function is NOT part of the frozen P2->P3 public contract.
+# P3 should consume retrieve() instead.
 async def retrieve_and_generate(query: str, session_id: str, focused_tag: Optional[str] = None) -> CitedAnswer:
     query_type = await mock_classify_query(query)
     context = await retrieve(query, query_type, session_id, focused_tag)

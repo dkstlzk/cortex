@@ -74,11 +74,89 @@ P3 should utilize the following shared orchestrator and graph tools when buildin
 **File:** `backend/app/retrieval/orchestrator.py`
 - `async def retrieve(query, query_type, session_id, focused_tag) -> RetrievalContext`
   - Runs graph, vector, and lexical pathways in parallel, fuses the results, and returns a structured `RetrievalContext`.
-- `async def retrieve_and_generate(query, session_id, focused_tag) -> CitedAnswer`
-  - Handles the end-to-end lifecycle: classifies the query, performs retrieval, and generates a checked answer.
 
 ### Knowledge Graph Agent Tools
 **File:** `backend/app/kg/shared_tools.py`
 - `async def context_graph_query(tag, query, depth="auto", include_analogues=False) -> GraphContext`
   - Intended to be exposed as an explicit tool for the Agents.
   - Dynamically runs the full context-aware graph pipeline (deep vs shallow) and returns the robust `GraphContext` dataclass.
+
+## Component Ownership
+
+P2 owns:
+- HTTP API definitions
+- Basic API request validation
+- Retrieval
+- Hybrid Search
+- Graph Retrieval
+- Retrieval interfaces
+- RetrievalContext
+- GraphContext
+- Retrieval tools
+- Citations
+
+P3 owns:
+- Copilot
+- Supervisor
+- Asset Agent
+- Diagnose Agent
+- Compliance Agent
+- Prompt construction
+- LLM invocation
+- Tool orchestration
+- Reasoning
+- Answer generation
+- Conversation state
+- LangGraph
+
+## Runtime Execution Flow
+
+General query:
+
+User
+↓
+POST /query
+↓
+HTTP API (P2)
+↓
+P3 Copilot
+↓
+retrieve()
+↓
+Need specialized reasoning?
+├── No → Stream response
+└── Yes
+      ↓
+   Supervisor
+      ↓
+   Selected Agent
+      ↓
+retrieve()
+context_graph_query()
+      ↓
+Stream final response
+
+Explicit agent invocation:
+
+POST /asset
+POST /diagnose
+POST /comply
+↓
+Dedicated Agent
+↓
+retrieve()
+context_graph_query()
+
+These explicit endpoints bypass the standard routing logic because the target agent is already known.
+
+## Notes
+
+This document defines the frozen interface between the P2 Retrieval layer and the future P3 Agent layer.
+
+The runtime execution flow described above represents the intended production architecture.
+
+The current repository still contains placeholder API implementations which will later delegate to the P3 Copilot and Agent services.
+
+Only the documented public interfaces are considered stable for P3 consumption.
+
+Internal helper functions inside P2 may evolve without notice.

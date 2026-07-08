@@ -5,13 +5,13 @@ from fastapi.responses import StreamingResponse
 
 from backend.app.schemas.query import QueryRequest
 # from backend.app.auth.jwt import get_current_user # To be implemented by P4/P1
-# from backend.app.retrieval.orchestrator import retrieve_and_generate # To be implemented
+# The final implementation will delegate to the P3 Copilot service instead of calling retrieve_and_generate directly.
 
 router = APIRouter()
 
 async def generate_sse_events(request: QueryRequest):
     # Mocking the SSE streaming response for Day 0 contracts
-    # In reality, this will call orchestrator functions
+    # This endpoint is a placeholder. The final implementation will delegate streaming to the P3 Copilot service.
     
     # Simulate processing time
     await asyncio.sleep(0.5)

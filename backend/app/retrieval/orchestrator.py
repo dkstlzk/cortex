@@ -1,14 +1,14 @@
 import asyncio
 from typing import List, Optional
 
-from backend.app.retrieval.models import QueryType, Chunk
+from backend.app.retrieval.models import QueryType, Chunk, RetrievalContext
 from backend.app.retrieval.context import mock_classify_query
 from backend.app.retrieval.pathways import graph_pathway, vector_pathway, lexical_pathway
 from backend.app.retrieval.fusion import FUSION_WEIGHTS, fuse, rerank
 
 async def retrieve(
     query: str, query_type: QueryType, session_id: str, focused_tag: Optional[str] = None
-) -> List[Chunk]:
+) -> RetrievalContext:
     
     # Run pathways in parallel
     graph_hits, vector_hits, lexical_hits = await asyncio.gather(
@@ -18,7 +18,12 @@ async def retrieve(
     )
     
     fused = fuse(graph_hits, vector_hits, lexical_hits, weights=FUSION_WEIGHTS[query_type])
-    return rerank(query, fused)[:8]
+    chunks = rerank(query, fused)[:8]
+    
+    return RetrievalContext(
+        chunks=chunks,
+        metadata={"query_type": query_type.value}
+    )
 
 class CitedAnswer:
     def __init__(self, answer: str, citations: List[str]):
@@ -47,5 +52,5 @@ async def generate_answer(query: str, chunks: List[Chunk]) -> CitedAnswer:
 
 async def retrieve_and_generate(query: str, session_id: str, focused_tag: Optional[str] = None) -> CitedAnswer:
     query_type = await mock_classify_query(query)
-    chunks = await retrieve(query, query_type, session_id, focused_tag)
-    return await generate_answer(query, chunks)
+    context = await retrieve(query, query_type, session_id, focused_tag)
+    return await generate_answer(query, context.chunks)

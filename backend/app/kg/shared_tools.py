@@ -1,10 +1,6 @@
 from typing import Optional, List, Any
-from backend.app.retrieval.models import QueryType, Chunk
+from backend.app.retrieval.models import QueryType, Chunk, GraphContext
 from backend.app.retrieval.pathways import graph_pathway
-
-class GraphContext:
-    def __init__(self, passages: List[Chunk]):
-        self.passages = passages
 
 async def context_graph_query(
     tag: str, query: str, depth: str = "auto", include_analogues: bool = False

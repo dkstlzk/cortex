@@ -48,3 +48,23 @@ class Chunk:
 @dataclass
 class SyntheticPassage(Chunk):
     pass
+
+@dataclass
+class Citation:
+    doc_id: str
+    passage_id: str
+    page: Optional[int] = None
+    text_snippet: Optional[str] = None
+
+@dataclass
+class GraphContext:
+    passages: List[Chunk]
+    entities: List[str] = field(default_factory=list)
+    relationships: List[str] = field(default_factory=list)
+
+@dataclass
+class RetrievalContext:
+    chunks: List[Chunk]
+    graph_context: Optional[GraphContext] = None
+    citations: List[Citation] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)

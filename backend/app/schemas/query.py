@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any, Dict
 
 class QueryRequest(BaseModel):
     query: str
@@ -20,3 +20,18 @@ class AgentTriggerEventData(BaseModel):
 
 class DoneEventData(BaseModel):
     answer_id: str
+
+class ReasoningEventData(BaseModel):
+    content: str
+
+class ToolCallEventData(BaseModel):
+    tool_name: str
+    tool_args: Dict[str, Any]
+
+class ToolResultEventData(BaseModel):
+    tool_name: str
+    result: Any
+
+class ErrorEventData(BaseModel):
+    message: str
+    code: Optional[str] = None

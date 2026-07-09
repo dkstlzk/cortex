@@ -27,8 +27,7 @@ async def run(state: AgentState) -> AsyncIterator[str]:
         yield emit_reasoning("Asset worker analyzing request...")
 
         graph_context_text = ""
-        tag = state.focused_tag or "unknown"
-        
+
         # Tool call: context_graph_query
         async for event, text in execute_graph_query_tool(state, "shallow", logger):
             if event:

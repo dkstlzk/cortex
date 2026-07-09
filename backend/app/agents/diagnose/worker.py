@@ -27,8 +27,7 @@ async def run(state: AgentState) -> AsyncIterator[str]:
         yield emit_reasoning("Diagnose worker investigating root causes...")
 
         graph_context_text = ""
-        tag = state.focused_tag or "unknown"
-        
+
         # Tool call: context_graph_query
         # Diagnose typically uses 'deep' graph query
         async for event, text in execute_graph_query_tool(state, "deep", logger):

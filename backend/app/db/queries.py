@@ -3,19 +3,19 @@ from backend.app.db.connection import qdrant_client, neo4j_driver, pg_pool
 
 async def qdrant_search(query_embedding: List[float], top_k: int = 10) -> List[Dict[str, Any]]:
     # Assuming collection name is 'chunks'
-    search_result = await qdrant_client.search(
-        collection_name="chunks",
-        query_vector=query_embedding,
+    response = await qdrant_client.query_points(
+        collection_name="cortex_chunks",
+        query=query_embedding,
         limit=top_k
     )
     return [
         {
             "chunk_id": str(hit.id),
-            "text": hit.payload.get("text", ""),
+            "text": hit.payload.get("text", "") if hit.payload else "",
             "payload": hit.payload,
             "score": hit.score
         }
-        for hit in search_result
+        for hit in response.points
     ]
 
 async def neo4j_neighbors(tag: str) -> List[Tuple[str, str, float]]:

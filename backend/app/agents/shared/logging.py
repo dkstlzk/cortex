@@ -110,7 +110,7 @@ def log_worker_lifecycle(
     """
     logger.info(
         "worker_lifecycle",
-        event=event,
+        lifecycle_event=event,
         worker=worker,
         session_id=session_id,
         detail=detail,

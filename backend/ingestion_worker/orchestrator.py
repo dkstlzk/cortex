@@ -18,7 +18,8 @@ class PipelineOrchestrator:
     @property
     def queue(self) -> Queue:
         if self._queue is None:
-            self._queue = get_queue()
+            from backend.shared.redis_client import ingestion_queue
+            self._queue = ingestion_queue
         return self._queue
         
     def enqueue_embedding(self, document_id: str) -> str:

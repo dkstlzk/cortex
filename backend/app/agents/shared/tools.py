@@ -3,7 +3,7 @@ Thin abstraction layer over the P2 retrieval interfaces.
 
 All P3 components (Copilot, Supervisor, Workers) must import retrieval
 functions from this module rather than importing directly from
-backend.app.retrieval.* or backend.app.kg.*.
+app.retrieval.* or app.kg.*.
 
 This module re-exports the frozen public interfaces without duplicating
 any retrieval logic.

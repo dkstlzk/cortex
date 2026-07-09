@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import query, agents
+from backend.app.api import query, agents
 
 app = FastAPI(title="CORTEX Fabric API")
 

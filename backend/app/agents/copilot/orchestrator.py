@@ -5,7 +5,7 @@ Implements the runtime flow:
     retrieve() → LLM Generation → Trigger Evaluation → stream or escalate
 
 The Copilot never performs specialist reasoning. If escalation is required,
-it constructs an EscalationContext and delegates to the Supervisor.
+it constructs an EscalationContext and invokes the LangGraph workflow.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from backend.app.agents.shared.state import EscalationContext
 from backend.app.agents.shared.logging import get_logger, log_error
 from backend.app.agents.copilot.prompts import build_copilot_messages
 from backend.app.agents.copilot.classifier import evaluate_trigger
-from backend.app.agents.supervisor.supervisor import route_escalation
+from backend.app.agents.graph.workflow import run_escalation_graph
 
 logger = get_logger("copilot")
 
@@ -84,7 +84,7 @@ async def run_query(
             yield emit_done(answer_id)
             return
 
-        # --- Step 5: Escalation ---
+        # --- Step 5: Escalation via LangGraph ---
         escalation = EscalationContext(
             query=query,
             session_id=session_id,
@@ -96,8 +96,8 @@ async def run_query(
             copilot_answer=draft_answer,
         )
 
-        # Delegate to Supervisor → Worker — worker events continue on the same stream
-        async for event in route_escalation(escalation):
+        # LangGraph workflow: Supervisor → Worker
+        async for event in run_escalation_graph(escalation):
             yield event
 
         yield emit_done(answer_id)

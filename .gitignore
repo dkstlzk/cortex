@@ -38,3 +38,6 @@ Thumbs.db
 #docs
 *.pdf
 *.txt
+
+# Runtime generated uploads
+backend/uploads/

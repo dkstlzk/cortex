@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Optional
 
 from backend.app.retrieval.models import QueryType, Chunk, RetrievalContext
-from backend.app.retrieval.context import mock_classify_query
+from backend.app.retrieval.context import classify_query
 from backend.app.retrieval.pathways import graph_pathway, vector_pathway, lexical_pathway
 from backend.app.retrieval.fusion import FUSION_WEIGHTS, fuse, rerank
 
@@ -55,6 +55,6 @@ async def generate_answer(query: str, chunks: List[Chunk]) -> CitedAnswer:
 # This function is NOT part of the frozen P2->P3 public contract.
 # P3 should consume retrieve() instead.
 async def retrieve_and_generate(query: str, session_id: str, focused_tag: Optional[str] = None) -> CitedAnswer:
-    query_type = await mock_classify_query(query)
+    query_type = await classify_query(query)
     context = await retrieve(query, query_type, session_id, focused_tag)
     return await generate_answer(query, context.chunks)

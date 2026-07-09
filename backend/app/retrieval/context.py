@@ -57,13 +57,13 @@ async def classify_query(query: str) -> QueryType:
 
 async def embed(text: str) -> List[float]:
     try:
-        response = await embed_client.embeddings.create(
-            input=text,
-            model="text-embedding-3-small" # Or whatever model is at the endpoint
-        )
-        return response.data[0].embedding
+        from backend.shared.services.embedding_service import get_embedding_service
+        service = get_embedding_service()
+        vectors = service.embed_batch([text])
+        return vectors[0]
     except Exception:
-        return [0.0] * 384 # Fallback for local dev without endpoint
+        from backend.shared.config import settings
+        return [0.0] * settings.EMBEDDING_DIMENSION  # Fallback for local dev
 
 async def assemble_context(
     query: str, session_id: str, focused_tag: Optional[str] = None

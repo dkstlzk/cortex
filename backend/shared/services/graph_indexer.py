@@ -1,5 +1,6 @@
 import structlog
 from typing import Dict, Any, List
+import os
 
 from backend.shared.neo4j_client import neo4j_driver
 from backend.shared.exceptions import InfrastructureError
@@ -75,7 +76,7 @@ class GraphIndexer:
                             document_id=document_id,
                             extractor_version="v1",
                             ontology_version="v1",
-                            model_name="gpt-4o-mini"
+                            model_name=os.getenv("LLM_MODEL", "gpt-4o-mini")
                         )
                 
                 # 2. Index Edges Grouped by Type
@@ -119,7 +120,7 @@ class GraphIndexer:
                             document_id=document_id,
                             extractor_version="v1",
                             ontology_version="v1",
-                            model_name="gpt-4o-mini"
+                            model_name=os.getenv("LLM_MODEL", "gpt-4o-mini")
                         )
                     
             logger.info("Successfully indexed graph data", document_id=document_id, node_count=len(nodes), edge_count=len(edges))

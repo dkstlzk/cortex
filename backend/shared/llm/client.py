@@ -5,10 +5,19 @@ from openai import AsyncOpenAI
 
 from backend.shared.config import settings
 
-LLM_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
-LLM_MODEL = settings.FAST_MODEL if settings.FAST_MODEL else "gpt-4o-mini"
-# Only use the custom base URL if a custom model is actually specified
-LLM_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") if settings.FAST_MODEL else None
+LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("FAST_MODEL_API_KEY", ""))
+LLM_MODEL = (
+    os.getenv("LLM_MODEL")
+    or settings.FAST_MODEL
+    or "accounts/fireworks/models/gpt-oss-120b"
+)
+
+# Use provider-specific base URL when configured
+LLM_BASE_URL = (
+    os.getenv("FAST_MODEL_BASE_URL")
+    or os.getenv("LLM_BASE_URL")
+    or None
+)
 
 _client = AsyncOpenAI(
     api_key=LLM_API_KEY or "dummy",
@@ -48,4 +57,7 @@ async def generate_json(
         stream=False,
         **kwargs
     )
+    # Some models like Fireworks gpt-oss-120b emit reasoning_content natively.
+    # We strictly extract message.content and discard reasoning to ensure 
+    # valid JSON payloads and preserve the intended system architecture.
     return response.choices[0].message.content or "{}"

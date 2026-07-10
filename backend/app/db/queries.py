@@ -1,9 +1,12 @@
 from typing import Any, Dict, List, Tuple
-from backend.app.db.connection import qdrant_client, neo4j_driver, pg_pool
+from backend.shared.database import pg_pool
+from backend.shared.neo4j_client import get_neo4j_async
+from backend.shared.qdrant_client import get_qdrant_async
 
 async def qdrant_search(query_embedding: List[float], top_k: int = 10) -> List[Dict[str, Any]]:
     # Assuming collection name is 'chunks'
-    response = await qdrant_client.query_points(
+    client = get_qdrant_async()
+    response = await client.query_points(
         collection_name="cortex_chunks",
         query=query_embedding,
         limit=top_k
@@ -24,7 +27,8 @@ async def neo4j_neighbors(tag: str) -> List[Tuple[str, str, float]]:
     RETURN neighbor.tag AS tag, type(r) AS rel_type, COALESCE(r.confidence, 1.0) AS confidence
     LIMIT 100
     """
-    async with neo4j_driver.session() as session:
+    driver = get_neo4j_async()
+    async with driver.session() as session:
         result = await session.run(query, tag=tag)
         records = await result.data()
         return [(rec["tag"], rec["rel_type"], rec["confidence"]) for rec in records]

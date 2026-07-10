@@ -2,6 +2,10 @@
 from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+# Load .env file explicitly so os.getenv can read variables that bypass Pydantic
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Resolve the .env next to the backend package so config loads regardless of
 # the process working directory (uvicorn/RQ worker/pytest can each differ).
@@ -25,6 +29,9 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "cortex"
     
+    # Full Connection String (Overrides individual Postgres settings if provided)
+    DATABASE_URL: str | None = None
+    
     # Neo4j Configuration
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
@@ -34,6 +41,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "cortex_chunks"
+    QDRANT_API_KEY: str | None = None
     
     # RQ Queue Configuration
     RQ_DOC_PARSE_TIMEOUT: int = 300
@@ -71,11 +79,21 @@ class Settings(BaseSettings):
     # Qdrant Specific
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_NAMESPACE_UUID: str = "12345678-1234-5678-1234-567812345678"
-
+    
+    # Model Endpoints
+    FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    FAST_MODEL_BASE_URL: str | None = None
+    EMBEDDING_MODEL_ENDPOINT: str | None = None
     
     # Storage Configuration
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
+    
+    # LLM Configuration
+    LLM_SUPPORTS_JSON_MODE: bool = True
+    
+    # Retrieval Configuration
+    RRF_K: int = 60
 
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE), case_sensitive=True, extra="ignore")
 
@@ -102,6 +120,8 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """Constructs the Redis connection URL."""
+        if self.REDIS_URL:
+            return self.REDIS_URL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 # Global settings instance

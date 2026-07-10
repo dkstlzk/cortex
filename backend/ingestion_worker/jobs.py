@@ -66,7 +66,7 @@ def process_document_job(document_id: str, stored_path: str) -> dict[str, Any]:
             pipeline_orchestrator.enqueue_embedding(document_id)
             pipeline_orchestrator.enqueue_graph(document_id)
             
-            logger.info("Document ingestion pipeline finished successfully", document_id=document_id, page_count=parsed_doc.page_count, chunk_count=len(chunks))
+            logger.info("Document ingestion pipeline finished successfully, enqueued parallel downstream jobs", document_id=document_id, page_count=parsed_doc.page_count, chunk_count=len(chunks))
             return {
                 "status": "success", 
                 "document_id": document_id, 

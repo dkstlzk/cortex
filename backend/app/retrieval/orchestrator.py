@@ -1,5 +1,4 @@
-import asyncio
-from typing import List, Optional
+from typing import Optional
 
 import structlog
 
@@ -46,39 +45,27 @@ async def retrieve(
     chunks = rerank(query, fused)[:8]
 
     return RetrievalContext(
-        chunks=chunks,
-        metadata={"query_type": query_type.value}
+        chunks=result.chunks,
+        metadata={
+            "query_type": result.diagnostics.get("query_type"),
+            "timings": result.timings,
+            "pathways_used": result.pathways_used
+        }
     )
-
-class CitedAnswer:
-    def __init__(self, answer: str, citations: List[str]):
-        self.answer = answer
-        self.citations = citations
-
-def citations_resolve(draft: str, chunks: List[Chunk]) -> bool:
-    # Mock regex check for [doc_id:passage_id] tags
-    return True
-
-def prompt(query: str, chunks: List[Chunk], strict: bool = False) -> str:
-    return "mock prompt"
-
-def self_check(draft: str, chunks: List[Chunk]) -> CitedAnswer:
-    return CitedAnswer(draft, ["d-91:p-4"])
-
-async def generate_answer(query: str, chunks: List[Chunk]) -> CitedAnswer:
-    # Mock LLM generation
-    draft = "Pump P-101A has experienced a bearing failure. [d-91:p-4]"
-    
-    if not citations_resolve(draft, chunks):
-        # Retry with strict citation instruction
-        draft = "Strict: Pump P-101A has experienced a bearing failure. [d-91:p-4]"
-        
-    return self_check(draft, chunks)
 
 # DEPRECATED/INTERNAL
 # This function is NOT part of the frozen P2->P3 public contract.
 # P3 should consume retrieve() instead.
 async def retrieve_and_generate(query: str, session_id: str, focused_tag: Optional[str] = None) -> CitedAnswer:
-    query_type = await classify_query(query)
-    context = await retrieve(query, query_type, session_id, focused_tag)
-    return await generate_answer(query, context.chunks)
+    search_query = SearchQuery(
+        text=query,
+        session_id=session_id,
+        focused_tag=focused_tag,
+        query_type=QueryType.OPEN
+    )
+    
+    pipeline = get_retrieval_pipeline()
+    result = await pipeline.run(search_query)
+    
+    prompt_builder = get_prompt_builder()
+    return await prompt_builder.generate_answer(query, result.chunks)

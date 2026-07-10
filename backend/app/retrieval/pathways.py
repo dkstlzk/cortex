@@ -17,7 +17,7 @@ async def vector_pathway(query: str) -> List[Chunk]:
         chunks.append(Chunk(
             chunk_id=r["chunk_id"],
             text=r["text"],
-            score=0.8, # Mock score
+            score=r.get("score", 0.8),
             source="vector",
             payload=r["payload"]
         ))
@@ -66,9 +66,19 @@ async def embedding_expand(query_embedding: List[float]) -> List[str]:
         return []
 
 async def type_based_expand(tag: str) -> List[str]:
-    # Strategy C - Type-Based Expansion (mock)
-    # Would query Neo4j for nodes with the same type
-    return []
+    query = """
+    MATCH (n {tag: $tag})
+    WITH labels(n)[0] AS node_label
+    MATCH (other) WHERE node_label IN labels(other) AND other.tag <> $tag
+    RETURN other.tag AS tag LIMIT 10
+    """
+    try:
+        async with neo4j_driver.session() as session:
+            result = await session.run(query, tag=tag)
+            records = await result.data()
+            return [r["tag"] for r in records if "tag" in r]
+    except Exception:
+        return []
 
 async def expand_seeds(ctx: TraversalContext) -> List[RankedSeed]:
     seeds: dict[str, float] = {}
@@ -97,9 +107,14 @@ async def expand_seeds(ctx: TraversalContext) -> List[RankedSeed]:
 
 # Helper for cosine similarity
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
-    # Mock: return a constant or simple check
-    if not v1 or not v2: return 0.0
-    return 0.8
+    if not v1 or not v2 or len(v1) != len(v2): 
+        return 0.0
+    dot = sum(a * b for a, b in zip(v1, v2))
+    norm_a = math.sqrt(sum(a * a for a in v1))
+    norm_b = math.sqrt(sum(b * b for b in v2))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 async def adaptive_traverse(
     seeds: List[RankedSeed], query_embedding: List[float],
@@ -168,8 +183,29 @@ async def detect_hubs(explicit_tags: List[str]) -> List[ScoredNode]:
         return [ScoredNode(tag=rec["tag"], score=0.7, depth=2, entity_type=rec["entity_type"] or "Unknown") for rec in records]
 
 async def get_node_edges(tag: str) -> List[Edge]:
-    # Mock
-    return []
+    query = """
+    MATCH (n {tag: $tag})-[r]->(target)
+    RETURN target.tag AS target_tag, type(r) AS rel_type, 
+           r.confidence AS confidence, r.source_doc_id AS source_doc_id, 
+           r.fact_id AS fact_id
+    LIMIT 20
+    """
+    edges = []
+    try:
+        async with neo4j_driver.session() as session:
+            result = await session.run(query, tag=tag)
+            records = await result.data()
+            for rec in records:
+                edges.append(Edge(
+                    target_tag=rec.get("target_tag", ""),
+                    rel_type=rec.get("rel_type", ""),
+                    confidence=rec.get("confidence") or 1.0,
+                    source_doc_id=rec.get("source_doc_id", ""),
+                    fact_id=rec.get("fact_id", "")
+                ))
+    except Exception:
+        pass
+    return edges
 
 def node_to_passage(node: ScoredNode, edges: List[Edge]) -> SyntheticPassage:
     lines = [f"{node.tag} ({node.entity_type}):"]
@@ -186,7 +222,12 @@ def node_to_passage(node: ScoredNode, edges: List[Edge]) -> SyntheticPassage:
 async def graph_pathway(
     query: str, query_type: QueryType, session_id: str, focused_tag: Optional[str] = None, depth_mode: str = "deep"
 ) -> List[Chunk]:
-    ctx = await assemble_context(query, session_id, focused_tag)
+    ctx = await assemble_context(
+        query,
+        session_id,
+        focused_tag=focused_tag,
+        query_type=query_type,
+    )
     seeds = await expand_seeds(ctx)
     
     if depth_mode == "shallow":

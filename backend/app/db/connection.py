@@ -1,6 +1,7 @@
 from qdrant_client import AsyncQdrantClient
 from neo4j import AsyncGraphDatabase
 from psycopg_pool import AsyncConnectionPool
+from backend.shared.config import settings
 
 from backend.shared.config import settings
 

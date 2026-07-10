@@ -45,11 +45,13 @@ async def lifespan(app: FastAPI):
                 time.sleep(wait_time)
 
     from backend.shared.services.qdrant_service import get_qdrant_service
+    from backend.shared.services.graph_indexer import get_graph_indexer
     
     # Verification check with independent retries
     wait_for_dependency(redis_conn.ping, "Redis")
     wait_for_dependency(neo4j_driver.verify_connectivity, "Neo4j")
     wait_for_dependency(get_qdrant_service().bootstrap_collections, "Qdrant")
+    wait_for_dependency(get_graph_indexer().bootstrap, "Graph Indexer")
     
     logger.info("Infrastructure clients verified and ready.")
 

@@ -13,6 +13,7 @@ logger = structlog.get_logger(__name__)
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
 FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") or None
+LLM_BASE_URL = os.getenv("LLM_BASE_URL") or None
 EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT") or None
 
 
@@ -100,7 +101,6 @@ async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]
     except Exception:
         return [0.0] * settings.EMBEDDING_DIMENSION
 
-
 class ContextAssembler:
     def __init__(self, embedding_service=None):
         self.embedding_service = embedding_service
@@ -157,13 +157,18 @@ async def embed(text: str) -> List[float]:
     return await _embed_with_fallback(text)
 
 
-async def assemble_context(query: str, session_id: str, focused_tag: Optional[str] = None) -> TraversalContext:
+async def assemble_context(
+    query: str,
+    session_id: str,
+    focused_tag: Optional[str] = None,
+    query_type: Optional[QueryType] = None,
+) -> TraversalContext:
     assembler = ContextAssembler()
     return await assembler.assemble(
         SearchQuery(
             text=query,
             session_id=session_id,
             focused_tag=focused_tag,
-            query_type=QueryType.OPEN,
+            query_type=query_type or QueryType.OPEN,
         )
     )

@@ -1,6 +1,10 @@
 
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+# Load .env file explicitly so os.getenv can read variables that bypass Pydantic
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 class Settings(BaseSettings):
     """

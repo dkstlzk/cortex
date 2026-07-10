@@ -215,7 +215,12 @@ def node_to_passage(node: ScoredNode, edges: List[Edge]) -> SyntheticPassage:
 async def graph_pathway(
     query: str, query_type: QueryType, session_id: str, focused_tag: Optional[str] = None, depth_mode: str = "deep"
 ) -> List[Chunk]:
-    ctx = await assemble_context(query, session_id, focused_tag)
+    ctx = await assemble_context(
+        query,
+        session_id,
+        focused_tag=focused_tag,
+        query_type=query_type,
+    )
     seeds = await expand_seeds(ctx)
     
     if depth_mode == "shallow":

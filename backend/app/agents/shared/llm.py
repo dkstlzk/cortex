@@ -40,6 +40,11 @@ async def generate_streaming(
     )
     async for chunk in response:
         delta = chunk.choices[0].delta if chunk.choices else None
+        
+        # Note: Some models (e.g., Fireworks gpt-oss-120b) generate reasoning_content 
+        # and do not support disabling it via API parameters (like thinking=false).
+        # We explicitly filter it out here by only yielding delta.content to prevent 
+        # leaking internal model reasoning to the frontend.
         if delta and delta.content:
             yield delta.content
 
@@ -64,4 +69,7 @@ async def generate(
         max_tokens=max_tokens,
         stream=False,
     )
+    
+    # Explicitly return only message.content, ignoring message.reasoning_content
+    # to maintain strict control over the exposed API surface.
     return response.choices[0].message.content or ""

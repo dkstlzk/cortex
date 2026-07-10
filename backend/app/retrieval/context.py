@@ -1,15 +1,18 @@
 from typing import List, Optional
-import os
-
-import structlog
 from openai import AsyncOpenAI
-
-from backend.app.db.queries import get_redis_session_history, pg_resolve_entities
-from backend.app.retrieval.interfaces import SearchQuery
-from backend.app.retrieval.models import QueryType, TraversalContext
+from backend.app.retrieval.models import TraversalContext, QueryType
+from backend.app.db.queries import pg_facts
 from backend.shared.config import settings
 
-logger = structlog.get_logger(__name__)
+# OpenAI-compatible client for the fast query classifier. Key, base URL, and
+# model all come from the single central settings object so the P2 retrieval
+# layer and the P3 agent layer target the exact same LLM endpoint.
+openai_client = AsyncOpenAI(
+    api_key=settings.fast_model_api_key or "dummy",
+    max_retries=settings.LLM_MAX_RETRIES,
+    timeout=settings.LLM_TIMEOUT,
+    **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
+)
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
 FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") or None
@@ -27,46 +30,23 @@ async def _classify_query_with_fallback(query: str) -> QueryType:
         return QueryType.OPEN
     if any(m in query_lower for m in ["what", "when"]):
         return QueryType.FACTUAL
-
-    messages = [
-        {
-            "role": "system",
-            "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word.",
-        },
-        {"role": "user", "content": query},
-    ]
-
-    if settings.FAST_MODEL:
-        try:
-            client = AsyncOpenAI(
-                api_key=FAST_MODEL_API_KEY or "dummy",
-                **({"base_url": FAST_MODEL_BASE_URL} if FAST_MODEL_BASE_URL else {}),
-            )
-            response = await client.chat.completions.create(
-                model=settings.FAST_MODEL,
-                messages=messages,
-                max_tokens=10,
-            )
-            cat = response.choices[0].message.content.strip().lower()
-            if cat in [e.value for e in QueryType]:
-                return QueryType(cat)
-        except Exception:
-            logger.warning("FAST_MODEL query classification failed; trying fallback")
-
-    if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
-        try:
-            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=10,
-            )
-            cat = response.choices[0].message.content.strip().lower()
-            if cat in [e.value for e in QueryType]:
-                return QueryType(cat)
-        except Exception:
-            logger.warning("OpenAI query classification failed; defaulting to OPEN")
-
+        
+    # LLM fallback
+    try:
+        response = await openai_client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
+                {"role": "user", "content": query}
+            ],
+            max_tokens=10
+        )
+        cat = response.choices[0].message.content.strip().lower()
+        if cat in [e.value for e in QueryType]:
+            return QueryType(cat)
+    except Exception:
+        pass
+    
     return QueryType.OPEN
 
 

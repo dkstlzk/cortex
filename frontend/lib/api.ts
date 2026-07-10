@@ -1,12 +1,7 @@
 'use client';
 
-import type {
-  GraphData, ComplianceReport, DiagnoseJob, MaintenanceEvent,
-  LinkedDocument, RiskAssessment, EntityFeedback,
-} from './types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const API_V1 = `${API_BASE}/api/v1`;
+import { API_V1, config } from './config';
+import type { GraphData, GraphNode, GraphEdge } from './types';
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -18,19 +13,30 @@ function getToken(): string | null {
   }
 }
 
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+function authHeaders(base: Record<string, string> = {}): Record<string, string> {
   const token = getToken();
-  const res = await fetch(`${API_V1}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
-  return res.json();
+  return token ? { ...base, Authorization: `Bearer ${token}` } : base;
 }
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  try {
+    const res = await fetch(`${API_V1}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: authHeaders({ 'Content-Type': 'application/json', ...(options.headers as Record<string, string>) }),
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
 
 export interface HealthStatus {
   ready: boolean;
@@ -45,14 +51,22 @@ export async function checkLiveness(): Promise<{ status: string }> {
   return apiFetch('/live');
 }
 
+// ---------------------------------------------------------------------------
+// Document upload (real /upload endpoint)
+// ---------------------------------------------------------------------------
+
 export async function uploadDocument(file: File): Promise<{ document_id: string; job_id: string; status: string }> {
-  const token = getToken();
+  const maxBytes = config.maxUploadMb * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error(`File exceeds the ${config.maxUploadMb} MB upload limit.`);
+  }
+
   const form = new FormData();
   form.append('file', file);
 
   const res = await fetch(`${API_V1}/upload`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: authHeaders(),
     body: form,
   });
 
@@ -63,7 +77,26 @@ export async function uploadDocument(file: File): Promise<{ document_id: string;
   return res.json();
 }
 
-// SSE streaming for copilot query
+// ---------------------------------------------------------------------------
+// Knowledge graph (real structured /graph endpoint, backed by Neo4j)
+// ---------------------------------------------------------------------------
+
+export async function fetchGraph(tag: string, depth: number = config.defaultGraphDepth): Promise<GraphData> {
+  const params = new URLSearchParams({ tag, depth: String(depth) });
+  const data = await apiFetch<{ center: string; nodes: GraphNode[]; edges: GraphEdge[] }>(
+    `/graph?${params.toString()}`,
+  );
+  return {
+    center: data.center,
+    nodes: data.nodes ?? [],
+    edges: data.edges ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SSE streaming (copilot query + direct agent invocation)
+// ---------------------------------------------------------------------------
+
 export interface SSECallbacks {
   onToken: (text: string) => void;
   onCitation: (citation: { doc_id: string; passage_id: string; page: number | null }) => void;
@@ -75,7 +108,11 @@ export interface SSECallbacks {
   onDone: (answerId: string) => void;
 }
 
-function parseSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>, callbacks: SSECallbacks, cancelled: { value: boolean }): void {
+function parseSSEStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  callbacks: SSECallbacks,
+  cancelled: { value: boolean },
+): void {
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -121,31 +158,22 @@ function parseSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>, callbac
   })();
 }
 
-export function streamQuery(query: string, entityTag: string | null, callbacks: SSECallbacks): () => void {
+function streamSSE(path: string, body: Record<string, unknown>, callbacks: SSECallbacks): () => void {
   const cancelled = { value: false };
   const controller = new AbortController();
-  const sessionId = `session-${Date.now()}`;
 
   (async () => {
     try {
-      const token = getToken();
-      const res = await fetch(`${API_V1}/query`, {
+      const res = await fetch(`${API_V1}${path}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          query,
-          session_id: sessionId,
-          focused_tag: entityTag || null,
-        }),
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        callbacks.onError(new Error(err.detail || `Query failed: ${res.status}`));
+        callbacks.onError(new Error(err.detail || `Request failed: ${res.status}`));
         return;
       }
 
@@ -163,114 +191,23 @@ export function streamQuery(query: string, entityTag: string | null, callbacks: 
   };
 }
 
-// Direct agent invocation (bypasses copilot/supervisor)
+export function streamQuery(query: string, entityTag: string | null, callbacks: SSECallbacks): () => void {
+  return streamSSE('/query', {
+    query,
+    session_id: `session-${Date.now()}`,
+    focused_tag: entityTag || null,
+  }, callbacks);
+}
+
 export function streamAgent(
   worker: 'asset' | 'diagnose' | 'comply',
   query: string,
   entityTag: string | null,
   callbacks: SSECallbacks,
 ): () => void {
-  const cancelled = { value: false };
-  const controller = new AbortController();
-  const sessionId = `agent-${worker}-${Date.now()}`;
-
-  (async () => {
-    try {
-      const token = getToken();
-      const res = await fetch(`${API_V1}/agents/${worker}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          query,
-          session_id: sessionId,
-          focused_tag: entityTag || null,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        callbacks.onError(new Error(err.detail || `Agent ${worker} failed: ${res.status}`));
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) { callbacks.onError(new Error('No response body')); return; }
-      parseSSEStream(reader, callbacks, cancelled);
-    } catch (err) {
-      if (!cancelled.value) callbacks.onError(err as Error);
-    }
-  })();
-
-  return () => {
-    cancelled.value = true;
-    controller.abort();
-  };
-}
-
-// Neo4j graph data - fetched via the diagnose agent asking about relationships
-// Since there's no dedicated graph endpoint, we query Neo4j context through the agent
-export async function fetchGraphFromAgent(tag: string): Promise<{ nodes: any[]; edges: any[]; center: string }> {
-  return new Promise((resolve, reject) => {
-    let fullText = '';
-    const nodes: any[] = [];
-    const edges: any[] = [];
-    let graphContext: any = null;
-
-    streamAgent('asset', `Show me all equipment, documents, and relationships connected to ${tag}. Include component details, failure modes, and related procedures.`, tag, {
-      onToken: (text) => { fullText += text; },
-      onCitation: () => {},
-      onAgentTrigger: () => {},
-      onReasoning: () => {},
-      onToolCall: () => {},
-      onToolResult: (_name, result) => {
-        // The tool_result from context_graph_query contains the graph data
-        if (result && typeof result === 'object') {
-          graphContext = result;
-        }
-      },
-      onError: (err) => reject(err),
-      onDone: () => {
-        // Try to extract graph structure from tool results
-        if (graphContext) {
-          try {
-            const ctx = typeof graphContext === 'string' ? JSON.parse(graphContext) : graphContext;
-            if (ctx.entities) {
-              ctx.entities.forEach((e: any, i: number) => {
-                nodes.push({
-                  id: e.id || e.tag || `node-${i}`,
-                  tag: e.tag || e.id || `node-${i}`,
-                  label: e.name || e.label || e.tag || `Node ${i}`,
-                  type: e.type || 'equipment',
-                  properties: e.properties || {},
-                  confidence: e.confidence ?? 1.0,
-                });
-              });
-            }
-            if (ctx.relationships) {
-              ctx.relationships.forEach((r: any, i: number) => {
-                edges.push({
-                  id: r.id || `edge-${i}`,
-                  source: r.source || r.from,
-                  target: r.target || r.to,
-                  relationship: r.type || r.relationship || 'related_to',
-                  confidence: r.confidence ?? 0.9,
-                });
-              });
-            }
-          } catch {}
-        }
-
-        resolve({ nodes, edges, center: tag });
-      },
-    });
-  });
-}
-
-// Upload document to real backend
-export async function uploadDocumentFile(file: File, onProgress?: (pct: number) => void): Promise<{ document_id: string; job_id: string; status: string }> {
-  return uploadDocument(file);
+  return streamSSE(`/agents/${worker}`, {
+    query,
+    session_id: `agent-${worker}-${Date.now()}`,
+    focused_tag: entityTag || null,
+  }, callbacks);
 }

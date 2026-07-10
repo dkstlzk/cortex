@@ -2,28 +2,36 @@
 Shared LLM invocation layer for the P3 Agent layer.
 
 All P3 components call LLMs through this module. It wraps the AsyncOpenAI
-client (already used in P2 for classification) with a streaming-aware
-interface suitable for the SSE contract.
+client with a streaming-aware interface suitable for the SSE contract.
 
-Configuration follows the same env-var pattern established in
-backend/app/retrieval/context.py.
+All LLM configuration (key, base URL, model, timeouts) is sourced from the
+single central `settings` object in backend/shared/config.py.
 """
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, List, Optional
-from backend.shared.llm.client import get_llm_client, get_default_model
+from typing import AsyncIterator, Dict, List, Optional
 
-_client = get_llm_client()
-LLM_MODEL = get_default_model()
+from openai import AsyncOpenAI
+
+from backend.shared.config import settings
+
+LLM_MODEL = settings.LLM_MODEL
+
+_client = AsyncOpenAI(
+    api_key=settings.llm_api_key or "dummy",
+    max_retries=settings.LLM_MAX_RETRIES,
+    timeout=settings.LLM_TIMEOUT,
+    **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
+)
 
 
 async def generate_streaming(
     messages: List[Dict[str, str]],
     *,
     model: Optional[str] = None,
-    temperature: float = 0.3,
-    max_tokens: int = 2048,
+    temperature: float = settings.LLM_TEMPERATURE,
+    max_tokens: int = settings.LLM_MAX_TOKENS,
 ) -> AsyncIterator[str]:
     """
     Stream LLM token chunks as an async iterator of strings.
@@ -53,7 +61,7 @@ async def generate(
     messages: List[Dict[str, str]],
     *,
     model: Optional[str] = None,
-    temperature: float = 0.3,
+    temperature: float = settings.LLM_TEMPERATURE,
     max_tokens: int = 1024,
 ) -> str:
     """

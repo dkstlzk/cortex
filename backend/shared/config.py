@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     
     # LLM Configuration
     LLM_SUPPORTS_JSON_MODE: bool = True
+    
+    # Retrieval Configuration
+    RRF_K: int = 60
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 

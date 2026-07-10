@@ -12,6 +12,7 @@ import { PageTransition } from '@/components/animations/page-transition';
 import { uploadDocument } from '@/lib/api';
 
 interface UploadedFile {
+  id: string;
   name: string;
   size: number;
   status: 'uploading' | 'processing' | 'complete' | 'error';
@@ -27,20 +28,25 @@ export default function DocumentsPage() {
   const { hasPermission } = useAuth();
 
   const handleUpload = async (file: File) => {
-    const entry: UploadedFile = { name: file.name, size: file.size, status: 'uploading', progress: 50 };
+    const id = `${file.name}-${Date.now()}`;
+    const entry: UploadedFile = { id, name: file.name, size: file.size, status: 'uploading', progress: 50 };
     setFiles((prev) => [...prev, entry]);
 
     try {
       const result = await uploadDocument(file);
       setFiles((prev) =>
         prev.map((f) =>
-          f.name === file.name ? { ...f, status: 'complete', progress: 100, documentId: result.document_id } : f,
+          f.id === id ? { ...f, status: 'complete', progress: 100, documentId: result.document_id } : f,
         ),
       );
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      const isConnectionError = message.includes('Failed to fetch') || message.includes('NetworkError');
       setFiles((prev) =>
         prev.map((f) =>
-          f.name === file.name ? { ...f, status: 'error', progress: 0, error: err instanceof Error ? err.message : 'Upload failed' } : f,
+          f.id === id
+            ? { ...f, status: 'error', progress: 0, error: isConnectionError ? 'Cannot reach the CORTEX API. Is the backend running and NEXT_PUBLIC_API_URL correct?' : message }
+            : f,
         ),
       );
     }
@@ -109,7 +115,7 @@ export default function DocumentsPage() {
               <h3 className="text-sm font-semibold text-zinc-400">Uploads</h3>
               {files.map((file) => (
                 <motion.div
-                  key={file.name}
+                  key={file.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="flex items-center gap-3 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg"

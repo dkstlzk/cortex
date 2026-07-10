@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Maximize2, RotateCcw, Crosshair } from 'lucide-react';
 import { useGraphStore } from '@/lib/graph-store';
-import { fetchGraphFromAgent } from '@/lib/api';
+import { fetchGraph } from '@/lib/api';
+import { config } from '@/lib/config';
 import { getNodeColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { GraphControls } from './graph-controls';
@@ -128,13 +129,13 @@ export function GraphExplorer() {
     setDepth, setLoading, isLoading,
   } = useGraphStore();
 
-  const loadGraph = useCallback(async (tag: string, _d: number) => {
+  const loadGraph = useCallback(async (tag: string, d: number) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchGraphFromAgent(tag);
+      const data = await fetchGraph(tag, d);
       if (data.nodes.length === 0) {
-        setError('No graph data returned. The backend may not have indexed any documents yet.');
+        setError(`No graph data found for ${tag}. The backend may not have indexed any documents yet.`);
       }
       setGraphData(data);
     } catch (err) {
@@ -145,7 +146,7 @@ export function GraphExplorer() {
   }, [setGraphData, setLoading]);
 
   useEffect(() => {
-    loadGraph('P-101A', depth);
+    loadGraph(config.defaultEntityTag, depth);
   }, [depth, loadGraph]);
 
   useEffect(() => {
@@ -307,7 +308,7 @@ export function GraphExplorer() {
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
-            <p className="text-sm text-zinc-400">Querying knowledge graph via agent...</p>
+            <p className="text-sm text-zinc-400">Loading knowledge graph...</p>
           </div>
         </motion.div>
       )}
@@ -316,7 +317,7 @@ export function GraphExplorer() {
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md text-center">
             <p className="text-sm text-zinc-400 mb-3">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => loadGraph('P-101A', depth)}>
+            <Button variant="outline" size="sm" onClick={() => loadGraph(config.defaultEntityTag, depth)}>
               Retry
             </Button>
           </div>

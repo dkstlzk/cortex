@@ -53,13 +53,17 @@ async def lexical_pathway(query: str) -> List[Chunk]:
 # --- Graph Pathway Components ---
 async def embedding_expand(query_embedding: List[float]) -> List[str]:
     # Strategy B - Embedding-Nearest Nodes
-    chunks = await qdrant_search(query_embedding, top_k=10)
-    doc_ids = [c["payload"].get("doc_id") for c in chunks if "doc_id" in c.get("payload", {})]
-    
-    # Fetch distinct subject_tags from facts table for these doc_ids
-    facts = await pg_facts(doc_ids)
-    tags = list(set([f["subject_tag"] for f in facts if "subject_tag" in f]))
-    return tags
+    try:
+        chunks = await qdrant_search(query_embedding, top_k=10)
+        doc_ids = [c["payload"].get("doc_id") for c in chunks if "doc_id" in c.get("payload", {})]
+
+        # Fetch distinct subject_tags from facts table for these doc_ids.
+        # The facts table is an optional enrichment source; if it is absent or
+        # empty this simply contributes no seeds rather than failing the pathway.
+        facts = await pg_facts(doc_ids)
+        return list(set([f["subject_tag"] for f in facts if "subject_tag" in f]))
+    except Exception:
+        return []
 
 async def type_based_expand(tag: str) -> List[str]:
     # Strategy C - Type-Based Expansion (mock)
@@ -121,8 +125,11 @@ async def adaptive_traverse(
             continue # Prune this branch
             
         visited[tag] = ScoredNode(tag=tag, score=node_score, depth=depth)
-        
-        neighbors = await neo4j_neighbors(tag)
+
+        try:
+            neighbors = await neo4j_neighbors(tag)
+        except Exception:
+            neighbors = []
         for neighbor_tag, rel_type, confidence in neighbors:
             if neighbor_tag not in visited:
                 frontier.append((neighbor_tag, depth + 1, node_score * confidence))
@@ -190,9 +197,12 @@ async def graph_pathway(
         traversed = await adaptive_traverse(seeds, ctx.query_embedding)
         
         if query_type in (QueryType.DIAGNOSTIC, QueryType.OPEN):
-            bridges = await find_bridge_nodes(ctx.explicit_tags, {n.tag for n in traversed})
-            hubs = await detect_hubs(ctx.explicit_tags)
-            traversed.extend(bridges + hubs)
+            try:
+                bridges = await find_bridge_nodes(ctx.explicit_tags, {n.tag for n in traversed})
+                hubs = await detect_hubs(ctx.explicit_tags)
+                traversed.extend(bridges + hubs)
+            except Exception:
+                pass
             
     passages = []
     for node in traversed[:20]:

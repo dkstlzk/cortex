@@ -40,9 +40,10 @@ def create_app() -> FastAPI:
     app.include_router(upload.router, prefix=API_V1_PREFIX)
     
     # Include P2/P3 application routers
-    from backend.app.api import query, agents
+    from backend.app.api import query, agents, graph
     app.include_router(query.router, prefix=API_V1_PREFIX, tags=["query"])
     app.include_router(agents.router, prefix=f"{API_V1_PREFIX}/agents", tags=["agents"])
+    app.include_router(graph.router, prefix=API_V1_PREFIX, tags=["graph"])
 
     return app
 

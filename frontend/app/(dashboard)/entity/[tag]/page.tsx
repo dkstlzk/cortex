@@ -20,7 +20,7 @@ export default function EntityPage({ params }: { params: Promise<{ tag: string }
   const [showGraph, setShowGraph] = useState(true);
 
   useEffect(() => {
-    fetchGraph(decodedTag, 2).then(setGraphData);
+    fetchGraph(decodedTag).then(setGraphData).catch(() => {});
   }, [decodedTag, setGraphData]);
 
   const nodeLabel = graphData?.nodes.find((n) => n.tag === decodedTag)?.label || decodedTag;

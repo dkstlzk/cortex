@@ -1,15 +1,18 @@
 from typing import List, Optional
-import os
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
 from backend.app.db.queries import pg_facts
+from backend.shared.config import settings
 
-FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
-EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT", "http://localhost:11434/v1")
-
-# We use the standard OpenAI client since it can point to any compliant endpoint
-openai_client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY or "dummy")
-embed_client = AsyncOpenAI(api_key="dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
+# OpenAI-compatible client for the fast query classifier. Key, base URL, and
+# model all come from the single central settings object so the P2 retrieval
+# layer and the P3 agent layer target the exact same LLM endpoint.
+openai_client = AsyncOpenAI(
+    api_key=settings.fast_model_api_key or "dummy",
+    max_retries=settings.LLM_MAX_RETRIES,
+    timeout=settings.LLM_TIMEOUT,
+    **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
+)
 
 async def resolve_entities(text: str) -> List[str]:
     # Very naive mock of entity resolution.
@@ -40,7 +43,7 @@ async def classify_query(query: str) -> QueryType:
     # LLM fallback
     try:
         response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.LLM_MODEL,
             messages=[
                 {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
                 {"role": "user", "content": query}

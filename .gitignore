@@ -10,6 +10,7 @@ __pycache__/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Node
 frontend/node_modules/
@@ -27,7 +28,7 @@ frontend/.next/
 # Build
 dist/
 build/
-
+.claude
 # Database
 *.db
 

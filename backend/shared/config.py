@@ -1,13 +1,18 @@
 
 from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve the .env next to the backend package so config loads regardless of
+# the process working directory (uvicorn/RQ worker/pytest can each differ).
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 class Settings(BaseSettings):
     """
     Core configuration for the CORTEX backend.
     Loads settings from the environment or a .env file.
     """
-    
+
     # Project Settings
     PROJECT_NAME: str = "CORTEX Ingestion & Data Layer"
     VERSION: str = "1.0.0"
@@ -33,14 +38,31 @@ class Settings(BaseSettings):
     # RQ Queue Configuration
     RQ_DOC_PARSE_TIMEOUT: int = 300
     RQ_EMBED_TIMEOUT: int = 180
+    RQ_GRAPH_TIMEOUT: int = 600
     RQ_RETRY_MAX: int = 3
     RQ_RETRY_INTERVALS: str = "10,30,60"
+
+    # Knowledge-graph extraction (P1 -> Neo4j)
+    GRAPH_EXTRACTION_ENABLED: bool = True
+    GRAPH_EXTRACTION_MAX_CHUNKS: int = 40
     
     # Redis & RQ Configuration
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
+    # LLM Configuration (OpenAI-compatible endpoint: Fireworks, OpenAI, local, ...)
+    # LLM_API_KEY is the primary credential; FAST_MODEL_API_KEY is used by the
+    # P2 retrieval classifier and falls back to LLM_API_KEY when unset.
+    LLM_API_KEY: str = ""
+    FAST_MODEL_API_KEY: str = ""
+    LLM_BASE_URL: Optional[str] = None
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_TEMPERATURE: float = 0.3
+    LLM_MAX_TOKENS: int = 2048
+    LLM_TIMEOUT: float = 60.0
+    LLM_MAX_RETRIES: int = 3
+
     # Embedding Configuration
     EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5"
     EMBEDDING_DIMENSION: int = 768
@@ -55,12 +77,27 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), case_sensitive=True, extra="ignore")
+
+    @property
+    def llm_api_key(self) -> str:
+        """Primary LLM credential, falling back to the fast-model key."""
+        return self.LLM_API_KEY or self.FAST_MODEL_API_KEY
+
+    @property
+    def fast_model_api_key(self) -> str:
+        """Credential for the P2 fast classifier, falling back to the primary key."""
+        return self.FAST_MODEL_API_KEY or self.LLM_API_KEY
 
     @property
     def database_url(self) -> str:
-        """Constructs the PostgreSQL connection URL."""
+        """SQLAlchemy connection URL (psycopg 3 dialect) for the sync engine."""
         return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @property
+    def postgres_dsn(self) -> str:
+        """Plain libpq DSN for the async psycopg pool (no SQLAlchemy dialect)."""
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     @property
     def redis_url(self) -> str:

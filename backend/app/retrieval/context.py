@@ -2,28 +2,24 @@ from typing import List, Optional
 import os
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
-from backend.app.db.queries import pg_facts
+from backend.app.db.queries import pg_facts, pg_resolve_entities, get_redis_session_history
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
+FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL")
 EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT", "http://localhost:11434/v1")
 
 # We use the standard OpenAI client since it can point to any compliant endpoint
-openai_client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY or "dummy")
+openai_client = AsyncOpenAI(
+    api_key=FAST_MODEL_API_KEY or "dummy",
+    base_url=FAST_MODEL_BASE_URL
+)
 embed_client = AsyncOpenAI(api_key="dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
 
 async def resolve_entities(text: str) -> List[str]:
-    # Very naive mock of entity resolution.
-    # In a real system, we would use an NER model or fuzzy match against entity_registry
-    tags = []
-    if "P-101A" in text:
-        tags.append("P-101A")
-    if "P-101B" in text:
-        tags.append("P-101B")
-    return tags
+    return await pg_resolve_entities(text)
 
 async def get_recent_messages(session_id: str, limit: int = 5) -> List[str]:
-    # Mocking chat history fetch from DB for now
-    return []
+    return await get_redis_session_history(session_id, limit)
 
 async def classify_query(query: str) -> QueryType:
     query_lower = query.lower()
@@ -56,6 +52,18 @@ async def classify_query(query: str) -> QueryType:
     return QueryType.OPEN
 
 async def embed(text: str) -> List[float]:
+    # 1. Try the external API endpoint first
+    try:
+        if EMBEDDING_MODEL_ENDPOINT:
+            response = await embed_client.embeddings.create(
+                model="BAAI/bge-base-en-v1.5", # or any default
+                input=[text]
+            )
+            return response.data[0].embedding
+    except Exception:
+        pass
+        
+    # 2. Fallback to local FastEmbed service
     try:
         from backend.shared.services.embedding_service import get_embedding_service
         service = get_embedding_service()

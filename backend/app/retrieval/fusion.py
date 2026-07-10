@@ -15,13 +15,18 @@ def fuse(
     # Normalise scores per pathway, then apply weights, then dedup by chunk_id
     combined = {}
     
-    # Mock normalisation (just taking raw score * weight for simplicity)
     for hits, source, weight in [(graph_hits, "graph", weights["graph"]),
                                  (vector_hits, "vector", weights["vector"]),
                                  (lexical_hits, "lexical", weights["lexical"])]:
+        if not hits: continue
+        min_score = min(h.score for h in hits)
+        max_score = max(h.score for h in hits)
+        
         for hit in hits:
-            # Simple dedup strategy: keep max score
-            scored_val = hit.score * weight
+            # Min-Max Normalization
+            norm_score = hit.score if max_score == min_score else (hit.score - min_score) / (max_score - min_score)
+            scored_val = norm_score * weight
+            
             if hit.chunk_id not in combined or combined[hit.chunk_id].score < scored_val:
                 hit.score = scored_val
                 combined[hit.chunk_id] = hit

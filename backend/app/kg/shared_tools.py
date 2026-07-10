@@ -1,6 +1,7 @@
 from typing import Optional, List, Any
 from backend.app.retrieval.models import QueryType, Chunk, GraphContext
 from backend.app.retrieval.pathways import graph_pathway
+from backend.app.retrieval.context import classify_query
 
 # Knowledge graph retrieval tool exposed to P3.
 async def context_graph_query(
@@ -14,16 +15,10 @@ async def context_graph_query(
     'auto': shallow for Asset (history mode)/Comply, deep for Diagnose.
     """
     
-    # We resolve "auto" based on context, here we mock the choice
-    if depth == "auto":
-        depth = "shallow"
-        
-    # The agent provides the tag. We treat the agent's question as the query.
-    # We'll pass the agent's explicit tag as the focused_tag for traversal context
+    q_type = await classify_query(query)
     
-    # query_type for Agent calls usually maps to OPEN or DIAGNOSTIC. 
-    # Let's mock it to DIAGNOSTIC for now if not provided
-    q_type = QueryType.DIAGNOSTIC
+    if depth == "auto":
+        depth = "deep" if q_type == QueryType.DIAGNOSTIC else "shallow"
     
     passages = await graph_pathway(
         query=query, 

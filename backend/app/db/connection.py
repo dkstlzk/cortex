@@ -1,17 +1,11 @@
-import os
 from qdrant_client import AsyncQdrantClient
 from neo4j import AsyncGraphDatabase
 from psycopg_pool import AsyncConnectionPool
+from backend.shared.config import settings
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cortex:cortex@localhost:5432/cortex")
-
-qdrant_client = AsyncQdrantClient(url=QDRANT_URL)
-neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-pg_pool = AsyncConnectionPool(DATABASE_URL, open=False)
+qdrant_client = AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+neo4j_driver = AsyncGraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
+pg_pool = AsyncConnectionPool(settings.database_url, open=False)
 
 async def init_db_pools():
     await pg_pool.open()

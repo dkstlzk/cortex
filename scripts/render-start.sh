@@ -8,5 +8,5 @@ echo "Starting RQ Ingestion Worker in the background..."
 python -m backend.ingestion_worker.main &
 
 echo "Starting FastAPI Web Server..."
-# Run the web server in the foreground
-uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+# Run the web server in the foreground with proxy headers for HTTPS
+uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"

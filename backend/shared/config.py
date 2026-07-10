@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     QDRANT_NAMESPACE_UUID: str = "12345678-1234-5678-1234-567812345678"
     
     # Model Endpoints
+    FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
     FAST_MODEL_BASE_URL: str | None = None
     EMBEDDING_MODEL_ENDPOINT: str | None = None
     

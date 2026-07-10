@@ -26,7 +26,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         
         try:
             self.client = OpenAI(
-                base_url=self.endpoint,
+                base_url=self.endpoint if self.endpoint != "https://api.openai.com/v1" else None,
                 api_key=api_key
             )
             logger.info("Initialized OpenAIEmbeddingProvider", endpoint=endpoint, model=model_name)

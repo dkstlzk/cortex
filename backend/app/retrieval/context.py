@@ -3,17 +3,14 @@ import os
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
 from backend.app.db.queries import pg_facts, pg_resolve_entities, get_redis_session_history
+from backend.shared.config import settings
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
-FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL")
-EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT", "http://localhost:11434/v1")
+FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") or None
+EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT") or None
 
-# We use the standard OpenAI client since it can point to any compliant endpoint
-openai_client = AsyncOpenAI(
-    api_key=FAST_MODEL_API_KEY or "dummy",
-    base_url=FAST_MODEL_BASE_URL
-)
-embed_client = AsyncOpenAI(api_key="dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
+# We will dynamically instantiate clients based on available environment variables
+# during the function calls to support robust cascading fallbacks.
 
 async def resolve_entities(text: str) -> List[str]:
     return await pg_resolve_entities(text)
@@ -33,35 +30,67 @@ async def classify_query(query: str) -> QueryType:
     if any(m in query_lower for m in ["what", "when"]):
         return QueryType.FACTUAL
         
-    # LLM fallback
-    try:
-        response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
-                {"role": "user", "content": query}
-            ],
-            max_tokens=10
-        )
-        cat = response.choices[0].message.content.strip().lower()
-        if cat in [e.value for e in QueryType]:
-            return QueryType(cat)
-    except Exception:
-        pass
+    messages = [
+        {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
+        {"role": "user", "content": query}
+    ]
     
+    # 1. Try Custom AMD GPU / vLLM Tunnel / Cloud Provider (Google, Fireworks, etc)
+    # Only use this if the user actually specified a custom FAST_MODEL in .env!
+    if settings.FAST_MODEL:
+        try:
+            # We pass the base URL if it exists, otherwise it tries to resolve it natively
+            client = AsyncOpenAI(
+                api_key=FAST_MODEL_API_KEY or "dummy", 
+                **({"base_url": FAST_MODEL_BASE_URL} if FAST_MODEL_BASE_URL else {})
+            )
+            response = await client.chat.completions.create(
+                model=settings.FAST_MODEL,
+                messages=messages,
+                max_tokens=10
+            )
+            cat = response.choices[0].message.content.strip().lower()
+            if cat in [e.value for e in QueryType]:
+                return QueryType(cat)
+        except Exception:
+            pass # Fall back to official
+            
+    # 2. Try Official OpenAI
+    if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
+        try:
+            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=10
+            )
+            cat = response.choices[0].message.content.strip().lower()
+            if cat in [e.value for e in QueryType]:
+                return QueryType(cat)
+        except Exception:
+            pass
+    
+    # 3. Default fallback
     return QueryType.OPEN
 
 async def embed(text: str) -> List[float]:
-    # 1. Try the external API endpoint first
-    try:
-        if EMBEDDING_MODEL_ENDPOINT:
-            response = await embed_client.embeddings.create(
-                model="BAAI/bge-base-en-v1.5", # or any default
-                input=[text]
-            )
+    # 1. Try Custom AMD GPU or Cloud Provider
+    if EMBEDDING_MODEL_ENDPOINT:
+        try:
+            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY or "dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
+            response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
             return response.data[0].embedding
-    except Exception:
-        pass
+        except Exception:
+            pass
+            
+    # 2. Try Official OpenAI
+    if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
+        try:
+            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
+            response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
+            return response.data[0].embedding
+        except Exception:
+            pass
         
     # 2. Fallback to local FastEmbed service
     try:

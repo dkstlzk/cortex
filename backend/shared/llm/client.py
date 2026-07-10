@@ -5,9 +5,10 @@ from openai import AsyncOpenAI
 
 from backend.shared.config import settings
 
-LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("FAST_MODEL_API_KEY", ""))
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", None)
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
+LLM_MODEL = settings.FAST_MODEL if settings.FAST_MODEL else "gpt-4o-mini"
+# Only use the custom base URL if a custom model is actually specified
+LLM_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") if settings.FAST_MODEL else None
 
 _client = AsyncOpenAI(
     api_key=LLM_API_KEY or "dummy",

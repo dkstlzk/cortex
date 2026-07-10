@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "cortex"
     
+    # Full Connection String (Overrides individual Postgres settings if provided)
+    DATABASE_URL: str | None = None
+    
     # Neo4j Configuration
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
@@ -29,6 +32,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "cortex_chunks"
+    QDRANT_API_KEY: str | None = None
     
     # RQ Queue Configuration
     RQ_DOC_PARSE_TIMEOUT: int = 300
@@ -42,6 +46,9 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
+    # Full Connection String (Overrides individual Redis settings if provided, useful for Upstash)
+    REDIS_URL: str | None = None
+    
     # Embedding Configuration
     EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5"
     EMBEDDING_DIMENSION: int = 768
@@ -50,7 +57,11 @@ class Settings(BaseSettings):
     # Qdrant Specific
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_NAMESPACE_UUID: str = "12345678-1234-5678-1234-567812345678"
-
+    
+    # Model Endpoints
+    FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    FAST_MODEL_BASE_URL: str | None = None
+    EMBEDDING_MODEL_ENDPOINT: str | None = None
     
     # Storage Configuration
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -67,11 +78,16 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Constructs the PostgreSQL connection URL."""
-        return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        if self.DATABASE_URL:
+            # Native Postgres clients (like psycopg_pool) expect postgresql://
+            return self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     @property
     def redis_url(self) -> str:
         """Constructs the Redis connection URL."""
+        if self.REDIS_URL:
+            return self.REDIS_URL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 # Global settings instance

@@ -8,8 +8,8 @@ logger = structlog.get_logger(__name__)
 
 # --- Sync Qdrant (for RQ) ---
 qdrant_client = QdrantClient(
-    host=settings.QDRANT_HOST,
-    port=settings.QDRANT_PORT
+    url=settings.QDRANT_URL,
+    api_key=settings.QDRANT_API_KEY
 )
 
 def get_qdrant() -> Generator[QdrantClient, None, None]:

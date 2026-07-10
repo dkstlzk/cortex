@@ -1,26 +1,23 @@
 from typing import List, Optional
 import os
+
+import structlog
 from openai import AsyncOpenAI
-from backend.app.retrieval.models import TraversalContext, QueryType
-from backend.app.db.queries import pg_facts, pg_resolve_entities, get_redis_session_history
+
+from backend.app.db.queries import get_redis_session_history, pg_resolve_entities
+from backend.app.retrieval.interfaces import SearchQuery
+from backend.app.retrieval.models import QueryType, TraversalContext
 from backend.shared.config import settings
+
+logger = structlog.get_logger(__name__)
 
 FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
 FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") or None
 EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT") or None
 
-# We will dynamically instantiate clients based on available environment variables
-# during the function calls to support robust cascading fallbacks.
 
-async def resolve_entities(text: str) -> List[str]:
-    return await pg_resolve_entities(text)
-
-async def get_recent_messages(session_id: str, limit: int = 5) -> List[str]:
-    return await get_redis_session_history(session_id, limit)
-
-async def classify_query(query: str) -> QueryType:
+async def _classify_query_with_fallback(query: str) -> QueryType:
     query_lower = query.lower()
-    # Simple regex pre-filter as per architecture doc
     if any(m in query_lower for m in ["why", "keeps failing", "root cause"]):
         return QueryType.DIAGNOSTIC
     if any(m in query_lower for m in ["how do i", "steps to"]):
@@ -29,97 +26,144 @@ async def classify_query(query: str) -> QueryType:
         return QueryType.OPEN
     if any(m in query_lower for m in ["what", "when"]):
         return QueryType.FACTUAL
-        
+
     messages = [
-        {"role": "system", "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word."},
-        {"role": "user", "content": query}
+        {
+            "role": "system",
+            "content": "Classify the query as one of: factual, diagnostic, procedural, open. Return only the single word.",
+        },
+        {"role": "user", "content": query},
     ]
-    
-    # 1. Try Custom AMD GPU / vLLM Tunnel / Cloud Provider (Google, Fireworks, etc)
-    # Only use this if the user actually specified a custom FAST_MODEL in .env!
+
     if settings.FAST_MODEL:
         try:
-            # We pass the base URL if it exists, otherwise it tries to resolve it natively
             client = AsyncOpenAI(
-                api_key=FAST_MODEL_API_KEY or "dummy", 
-                **({"base_url": FAST_MODEL_BASE_URL} if FAST_MODEL_BASE_URL else {})
+                api_key=FAST_MODEL_API_KEY or "dummy",
+                **({"base_url": FAST_MODEL_BASE_URL} if FAST_MODEL_BASE_URL else {}),
             )
             response = await client.chat.completions.create(
                 model=settings.FAST_MODEL,
                 messages=messages,
-                max_tokens=10
+                max_tokens=10,
             )
             cat = response.choices[0].message.content.strip().lower()
             if cat in [e.value for e in QueryType]:
                 return QueryType(cat)
         except Exception:
-            pass # Fall back to official
-            
-    # 2. Try Official OpenAI
+            logger.warning("FAST_MODEL query classification failed; trying fallback")
+
     if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
         try:
             client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                max_tokens=10
+                max_tokens=10,
             )
             cat = response.choices[0].message.content.strip().lower()
             if cat in [e.value for e in QueryType]:
                 return QueryType(cat)
         except Exception:
-            pass
-    
-    # 3. Default fallback
+            logger.warning("OpenAI query classification failed; defaulting to OPEN")
+
     return QueryType.OPEN
 
-async def embed(text: str) -> List[float]:
-    # 1. Try Custom AMD GPU or Cloud Provider
+
+async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]:
     if EMBEDDING_MODEL_ENDPOINT:
         try:
-            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY or "dummy", base_url=EMBEDDING_MODEL_ENDPOINT)
+            client = AsyncOpenAI(
+                api_key=FAST_MODEL_API_KEY or "dummy",
+                base_url=EMBEDDING_MODEL_ENDPOINT,
+            )
             response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
             return response.data[0].embedding
         except Exception:
-            pass
-            
-    # 2. Try Official OpenAI
+            logger.warning("Custom embedding endpoint failed; trying fallback")
+
     if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
         try:
             client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
             response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
             return response.data[0].embedding
         except Exception:
-            pass
-        
-    # 2. Fallback to local FastEmbed service
+            logger.warning("OpenAI embeddings failed; trying local embedding service")
+
     try:
-        from backend.shared.services.embedding_service import get_embedding_service
-        service = get_embedding_service()
+        service = embedding_service
+        if service is None:
+            from backend.shared.services.embedding_service import get_embedding_service
+
+            service = get_embedding_service()
         vectors = service.embed_batch([text])
         return vectors[0]
     except Exception:
-        from backend.shared.config import settings
-        return [0.0] * settings.EMBEDDING_DIMENSION  # Fallback for local dev
+        return [0.0] * settings.EMBEDDING_DIMENSION
 
-async def assemble_context(
-    query: str, session_id: str, focused_tag: Optional[str] = None
-) -> TraversalContext:
-    explicit = await resolve_entities(query)
-    
-    history_texts = await get_recent_messages(session_id, limit=5)
-    history_tags = set()
-    for msg in history_texts:
-        history_tags.update(await resolve_entities(msg))
-        
-    implicit = list(history_tags - set(explicit))
-    if focused_tag and focused_tag not in explicit:
-        implicit.insert(0, focused_tag)
-        
-    return TraversalContext(
-        explicit_tags=explicit,
-        implicit_tags=implicit[:5],  # Cap to prevent context explosion
-        query_type=await classify_query(query),
-        query_embedding=await embed(query)
+
+class ContextAssembler:
+    def __init__(self, embedding_service=None):
+        self.embedding_service = embedding_service
+
+    async def assemble(self, query: SearchQuery) -> TraversalContext:
+        explicit = await self.resolve_entities(query.text)
+
+        history_texts = await self.get_recent_messages(query.session_id, limit=5)
+        history_tags = set()
+        for msg in history_texts:
+            history_tags.update(await self.resolve_entities(msg))
+
+        implicit = list(history_tags - set(explicit))
+        if query.focused_tag and query.focused_tag not in explicit:
+            implicit.insert(0, query.focused_tag)
+
+        final_query_type = query.query_type
+        if final_query_type == QueryType.OPEN:
+            final_query_type = await self.classify_query(query.text)
+
+        return TraversalContext(
+            explicit_tags=explicit,
+            implicit_tags=implicit[:5],
+            query_type=final_query_type,
+            query_embedding=await self._get_embedding(query.text),
+        )
+
+    async def resolve_entities(self, text: str) -> List[str]:
+        return await pg_resolve_entities(text)
+
+    async def get_recent_messages(self, session_id: str, limit: int = 5) -> List[str]:
+        return await get_redis_session_history(session_id, limit)
+
+    async def classify_query(self, query: str) -> QueryType:
+        return await _classify_query_with_fallback(query)
+
+    async def _get_embedding(self, text: str) -> List[float]:
+        return await _embed_with_fallback(text, self.embedding_service)
+
+
+async def resolve_entities(text: str) -> List[str]:
+    return await pg_resolve_entities(text)
+
+
+async def get_recent_messages(session_id: str, limit: int = 5) -> List[str]:
+    return await get_redis_session_history(session_id, limit)
+
+
+async def classify_query(query: str) -> QueryType:
+    return await _classify_query_with_fallback(query)
+
+
+async def embed(text: str) -> List[float]:
+    return await _embed_with_fallback(text)
+
+
+async def assemble_context(query: str, session_id: str, focused_tag: Optional[str] = None) -> TraversalContext:
+    assembler = ContextAssembler()
+    return await assembler.assemble(
+        SearchQuery(
+            text=query,
+            session_id=session_id,
+            focused_tag=focused_tag,
+            query_type=QueryType.OPEN,
+        )
     )
-

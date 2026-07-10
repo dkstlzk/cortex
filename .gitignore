@@ -28,6 +28,7 @@ frontend/.next/
 # Build
 dist/
 build/
+.claude
 # Database
 *.db
 

@@ -9,7 +9,7 @@ logger = structlog.get_logger(__name__)
 
 try:
     engine = create_engine(
-        settings.database_url,
+        settings.database_url.replace("postgresql://", "postgresql+psycopg://", 1),
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,

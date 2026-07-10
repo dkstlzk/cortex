@@ -75,9 +75,9 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         """Constructs the PostgreSQL connection URL."""
         if self.DATABASE_URL:
-            # psycopg_pool and sqlalchemy expect postgresql://, not postgres://
-            return self.DATABASE_URL.replace("postgres://", "postgresql://")
-        return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            # Native Postgres clients (like psycopg_pool) expect postgresql://
+            return self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     @property
     def redis_url(self) -> str:

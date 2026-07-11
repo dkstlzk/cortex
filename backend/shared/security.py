@@ -4,18 +4,16 @@ from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.shared.exceptions import AuthenticationError
 
+from functools import lru_cache
+
 security_scheme = HTTPBearer()
 
-_jwks_client = None
-
+@lru_cache
 def get_jwks_client() -> jwt.PyJWKClient:
-    global _jwks_client
-    if _jwks_client is None:
-        jwks_url = os.getenv("JWKS_URL")
-        if not jwks_url:
-            raise RuntimeError("JWKS_URL must be configured when ENABLE_AUTH is true.")
-        _jwks_client = jwt.PyJWKClient(jwks_url)
-    return _jwks_client
+    jwks_url = os.getenv("JWKS_URL")
+    if not jwks_url:
+        raise RuntimeError("JWKS_URL must be configured when ENABLE_AUTH is true.")
+    return jwt.PyJWKClient(jwks_url)
 
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
     """

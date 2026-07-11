@@ -36,6 +36,9 @@ jobs:
       run: docker-compose up -d
       working-directory: .
       
+    - name: Wait for Services to Initialize
+      run: sleep 10
+      
     - name: Prepare Environment
       run: cp .env.example .env
       

@@ -50,6 +50,29 @@ def main():
         redis_conn.ping()
         logger.info("Connected to Redis successfully.")
         
+        # Start a dummy HTTP server in a background thread to satisfy Render's Web Service port binding health checks
+        import os
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        
+        port_str = os.environ.get("PORT")
+        if port_str:
+            class HealthCheckHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"OK")
+            
+            def run_dummy_server():
+                try:
+                    server = HTTPServer(("0.0.0.0", int(port_str)), HealthCheckHandler)
+                    logger.info("Started dummy health check server", port=port_str)
+                    server.serve_forever()
+                except Exception as e:
+                    logger.warning("Failed to start dummy server", error=str(e))
+                    
+            threading.Thread(target=run_dummy_server, daemon=True).start()
+
         # Initialize and run the RQ Worker
         # We listen only to the designated ingestion queue
         worker = Worker(

@@ -96,6 +96,7 @@ class ParsingService:
                     response = httpx.post(
                         settings.REMOTE_PARSER_URL,
                         files=files,
+                        headers={"ngrok-skip-browser-warning": "1"},
                         timeout=300.0
                     )
                 response.raise_for_status()

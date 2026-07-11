@@ -22,6 +22,7 @@ _client = AsyncOpenAI(
     api_key=settings.llm_api_key or "dummy",
     max_retries=settings.LLM_MAX_RETRIES,
     timeout=settings.LLM_TIMEOUT,
+    default_headers={"ngrok-skip-browser-warning": "1"},
     **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
 )
 

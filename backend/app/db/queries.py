@@ -51,23 +51,25 @@ async def pg_facts(doc_ids: List[str]) -> List[Dict[str, Any]]:
             ]
 
 async def pg_resolve_entities(text: str) -> List[str]:
-    """Find entities in text using the entity_aliases table."""
+    """Resolve entities in text using ILIKE against entity_aliases."""
     if not text:
         return []
+        
+    query = "SELECT canonical_tag FROM entity_aliases WHERE %s ILIKE '%%' || alias || '%%'"
     
-    # We want to find aliases that appear in the text
-    query = "SELECT DISTINCT tag FROM entity_aliases WHERE %s ILIKE '%%' || alias_text || '%%'"
     try:
         async with pg_pool.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(query, (text,))
                 rows = await cur.fetchall()
-                return [row[0] for row in rows]
+                return list(set(row[0] for row in rows))
     except Exception:
-        # Fallback to naive string matching if table is empty or missing during dev
+        # Fallback if table is missing or query fails
         tags = []
-        if "P-101A" in text: tags.append("P-101A")
-        if "P-101B" in text: tags.append("P-101B")
+        if "P-101A" in text:
+            tags.append("P-101A")
+        if "P-101B" in text:
+            tags.append("P-101B")
         return tags
 
 async def get_redis_session_history(session_id: str, limit: int = 5) -> List[str]:

@@ -33,7 +33,7 @@ jobs:
       run: uv run ruff check .
       
     - name: Start Database Services
-      run: docker-compose up -d
+      run: docker compose up -d
       working-directory: .
       
     - name: Wait for Services to Initialize

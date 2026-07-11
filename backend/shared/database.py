@@ -8,13 +8,13 @@ from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)
 
+from sqlalchemy.pool import NullPool
+
 # --- Sync Postgres (for RQ) ---
 try:
     engine = create_engine(
         settings.database_url.replace("postgresql://", "postgresql+psycopg://", 1),
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
+        poolclass=NullPool,
     )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     logger.info("PostgreSQL engine initialized.")

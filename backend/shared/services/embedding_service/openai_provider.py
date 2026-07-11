@@ -17,39 +17,43 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def __init__(self, endpoint: str, model_name: str = "BAAI/bge-base-en-v1.5"):
         self.endpoint = endpoint
         self.model_name = model_name
-        
-        # Initialize synchronous OpenAI client
-        # We use a dummy API key if none is provided, which works for vLLM/Ollama
         import os
-        api_key = os.getenv("FAST_MODEL_API_KEY", "dummy")
-        
-        try:
-            self.client = OpenAI(
-                base_url=self.endpoint if self.endpoint != "https://api.openai.com/v1" else None,
-                api_key=api_key,
-                default_headers={"ngrok-skip-browser-warning": "1"}
-            )
-            logger.info("Initialized OpenAIEmbeddingProvider", endpoint=endpoint, model=model_name)
-        except Exception as e:
-            logger.error("Failed to initialize OpenAI client for embeddings", error=str(e), exc_info=True)
-            raise InfrastructureError(f"OpenAI embedding client initialization failed: {str(e)}", service="Embedding")
+        self.api_key = os.getenv("FAST_MODEL_API_KEY", "dummy")
+        logger.info("Initialized Remote EmbeddingProvider", endpoint=endpoint, model=model_name)
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """
-        Embeds a batch of texts using the OpenAI-compatible API endpoint.
-        """
         if not texts:
             return []
             
+        import httpx
         try:
-            response = self.client.embeddings.create(
-                model=self.model_name,
-                input=texts
+            # Send POST directly, bypassing the OpenAI python client's hidden connection pooling
+            # Ensure we append /embeddings if it's the v1 base url
+            url = self.endpoint
+            if url.endswith("/v1"):
+                url = url + "/embeddings"
+            elif not url.endswith("/embeddings"):
+                url = url.rstrip("/") + "/embeddings"
+                
+            response = httpx.post(
+                url,
+                json={
+                    "model": self.model_name,
+                    "input": texts
+                },
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "1"
+                },
+                timeout=120.0 # High timeout per batch
             )
+            response.raise_for_status()
+            data = response.json()
             
-            # The API returns results in order, extract just the float lists
-            return [data.embedding for data in response.data]
+            # Extract floats
+            return [item["embedding"] for item in data["data"]]
             
         except Exception as e:
-            logger.error("OpenAI API embedding failed", batch_size=len(texts), endpoint=self.endpoint, error=str(e), exc_info=True)
+            logger.error("Remote API embedding failed", batch_size=len(texts), endpoint=self.endpoint, error=str(e), exc_info=True)
             raise InfrastructureError(f"Remote embedding generation failed: {str(e)}", service="Embedding")

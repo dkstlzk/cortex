@@ -112,11 +112,18 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """SQLAlchemy connection URL (psycopg 3 dialect) for the sync engine."""
+        if self.DATABASE_URL:
+            # SQLAlchemy requires the psycopg dialect explicitly
+            if self.DATABASE_URL.startswith("postgresql://"):
+                return self.DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+            return self.DATABASE_URL
         return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def postgres_dsn(self) -> str:
         """Plain libpq DSN for the async psycopg pool (no SQLAlchemy dialect)."""
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     @property

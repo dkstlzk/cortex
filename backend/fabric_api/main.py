@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 import structlog
 
 from backend.shared.config import settings
@@ -26,7 +27,7 @@ def create_app() -> FastAPI:
     app.add_middleware(StructlogRequestMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"], # In production, restrict this
+        allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(","),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -36,7 +37,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(CortexError, cortex_error_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
+    # Health router is usually public
     app.include_router(health.router, prefix=API_V1_PREFIX)
+    
+    # TODO: Implement JWT authentication before production deployment.
+    # Authentication is explicitly DISABLED for this demo environment.
     app.include_router(upload.router, prefix=API_V1_PREFIX)
     
     # Include P2/P3 application routers

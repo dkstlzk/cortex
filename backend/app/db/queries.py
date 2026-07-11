@@ -63,14 +63,12 @@ async def pg_resolve_entities(text: str) -> List[str]:
                 await cur.execute(query, (text,))
                 rows = await cur.fetchall()
                 return list(set(row[0] for row in rows))
-    except Exception:
+    except Exception as e:
         # Fallback if table is missing or query fails
-        tags = []
-        if "P-101A" in text:
-            tags.append("P-101A")
-        if "P-101B" in text:
-            tags.append("P-101B")
-        return tags
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.warning("Entity resolution query failed", error=str(e))
+        return []
 
 async def get_redis_session_history(session_id: str, limit: int = 5) -> List[str]:
     """Fetch recent message history from Redis."""

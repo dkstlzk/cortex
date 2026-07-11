@@ -1,8 +1,7 @@
 import pytest
-import asyncio
 from backend.app.retrieval.context import ContextAssembler
 from backend.app.retrieval.retrievers.graph import GraphRetriever
-from backend.app.retrieval.models import Chunk, QueryType
+from backend.app.retrieval.models import QueryType
 from backend.app.retrieval.interfaces import SearchQuery
 from backend.app.kg.shared_tools import context_graph_query
 

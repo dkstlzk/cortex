@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from backend.shared.config import settings
 from backend.shared.logging import setup_logging
 from backend.shared.database import engine, init_db_pools, close_db_pools
-from backend.shared.neo4j_client import neo4j_driver, get_neo4j_async, close_neo4j_async
-from backend.shared.qdrant_client import qdrant_client, get_qdrant_async, close_qdrant_async
+from backend.shared.neo4j_client import neo4j_driver, close_neo4j_async
+from backend.shared.qdrant_client import qdrant_client, close_qdrant_async
 from backend.shared.redis_client import redis_conn
 
 logger = structlog.get_logger(__name__)

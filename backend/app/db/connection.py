@@ -3,7 +3,6 @@ from neo4j import AsyncGraphDatabase
 from psycopg_pool import AsyncConnectionPool
 from backend.shared.config import settings
 
-from backend.shared.config import settings
 
 # All connection config comes from the single central settings object, so the
 # async P2/P3 clients target exactly the same infrastructure as the sync

@@ -1,7 +1,7 @@
 from typing import Optional
 
 from backend.app.retrieval.models import QueryType, RetrievalContext
-from backend.app.retrieval.interfaces import SearchQuery, RetrievalResult
+from backend.app.retrieval.interfaces import SearchQuery
 from backend.app.retrieval.context import ContextAssembler
 from backend.app.retrieval.pipeline import DefaultRetrievalPipeline
 from backend.app.retrieval.fusion import ReciprocalRankFusion

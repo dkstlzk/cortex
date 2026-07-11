@@ -1,4 +1,4 @@
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict
 from collections import Counter
 from itertools import combinations
 import structlog

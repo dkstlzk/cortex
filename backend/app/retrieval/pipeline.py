@@ -4,7 +4,6 @@ from typing import List
 import structlog
 
 from backend.app.retrieval.interfaces import RetrievalPipeline, BaseRetriever, FusionStrategy, SearchQuery, RetrievalResult
-from backend.app.retrieval.models import Chunk, TraversalContext
 from backend.app.retrieval.context import ContextAssembler
 
 logger = structlog.get_logger(__name__)

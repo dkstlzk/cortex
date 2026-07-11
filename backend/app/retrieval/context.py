@@ -2,10 +2,12 @@ from typing import List, Optional
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
 from backend.app.retrieval.interfaces import SearchQuery
-from backend.app.db.queries import pg_facts, pg_resolve_entities, get_redis_session_history
+from backend.app.db.queries import pg_resolve_entities, get_redis_session_history
 from backend.shared.config import settings
+import os
 import structlog
 
+logger = structlog.get_logger(__name__)
 # OpenAI-compatible client for the fast query classifier. Key, base URL, and
 # model all come from the single central settings object so the P2 retrieval
 # layer and the P3 agent layer target the exact same LLM endpoint.

@@ -4,7 +4,6 @@ from openai import OpenAI
 
 from backend.shared.services.embedding_service.provider import EmbeddingProvider
 from backend.shared.exceptions import InfrastructureError
-from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)
 

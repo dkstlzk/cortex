@@ -1,5 +1,4 @@
-from typing import Optional, List, Any
-from backend.app.retrieval.models import QueryType, Chunk, GraphContext
+from backend.app.retrieval.models import QueryType, GraphContext
 from backend.app.retrieval.interfaces import SearchQuery
 from backend.app.retrieval.retrievers.graph import GraphRetriever
 from backend.app.retrieval.orchestrator import get_context_assembler

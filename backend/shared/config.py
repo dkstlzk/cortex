@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    REDIS_URL: str | None = None
     
     # LLM Configuration (OpenAI-compatible endpoint: Fireworks, OpenAI, local, ...)
     # LLM_API_KEY is the primary credential; FAST_MODEL_API_KEY is used by the

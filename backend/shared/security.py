@@ -21,11 +21,12 @@ def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security_sche
     try:
         jwks_client = jwt.PyJWKClient(jwks_url)
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+        audience = os.getenv("JWT_AUDIENCE")
         payload = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
-            options={"verify_aud": False}
+            audience=audience
         )
         return payload
     except jwt.PyJWKClientError as e:

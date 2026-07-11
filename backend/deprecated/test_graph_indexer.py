@@ -1,7 +1,6 @@
 # HISTORICAL SCRIPT: This file tests the deprecated GraphIndexer.
 # It is not executed in production and remains here for archival purposes.
 
-import asyncio
 from backend.deprecated.graph_indexer import get_graph_indexer
 
 def run_mock_ingestion():

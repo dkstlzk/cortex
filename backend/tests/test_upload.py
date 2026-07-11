@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 import uuid
 
 from backend.fabric_api.main import app
-from backend.shared.database import Base, engine, SessionLocal
+from backend.shared.database import SessionLocal
 from backend.shared.models.document import Document
 from backend.shared.redis_client import get_queue
 from backend.shared.security import verify_jwt

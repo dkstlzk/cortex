@@ -6,22 +6,31 @@ from backend.shared.exceptions import AuthenticationError
 
 security_scheme = HTTPBearer()
 
+_jwks_client = None
+
+def get_jwks_client() -> jwt.PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        jwks_url = os.getenv("JWKS_URL")
+        if not jwks_url:
+            raise RuntimeError("JWKS_URL must be configured when ENABLE_AUTH is true.")
+        _jwks_client = jwt.PyJWKClient(jwks_url)
+    return _jwks_client
+
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
     """
     Validates a JWT against a remote JWKS URL. 
-    Production deployments must set the JWKS_URL environment variable.
+    Production deployments must set the JWKS_URL and JWT_AUDIENCE environment variables.
     """
     token = credentials.credentials
-    jwks_url = os.getenv("JWKS_URL")
     
-    if not jwks_url:
-        # Fail closed if security is not configured
-        raise AuthenticationError("Authentication provider (JWKS_URL) not configured.")
+    audience = os.getenv("JWT_AUDIENCE")
+    if not audience:
+        raise RuntimeError("JWT_AUDIENCE must be configured when ENABLE_AUTH is true.")
         
     try:
-        jwks_client = jwt.PyJWKClient(jwks_url)
+        jwks_client = get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token)
-        audience = os.getenv("JWT_AUDIENCE")
         payload = jwt.decode(
             token,
             signing_key.key,

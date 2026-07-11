@@ -32,5 +32,12 @@ jobs:
     - name: Run Ruff
       run: uv run ruff check .
       
+    - name: Start Database Services
+      run: docker-compose up -d
+      working-directory: .
+      
+    - name: Prepare Environment
+      run: cp .env.example .env
+      
     - name: Run Pytest
       run: uv run pytest tests/

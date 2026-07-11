@@ -36,11 +36,19 @@ jobs:
       run: docker compose up -d
       working-directory: .
       
-    - name: Wait for Services to Initialize
-      run: sleep 10
+    - name: Wait for Postgres
+      run: |
+        until docker compose exec -T postgres pg_isready -U postgres -d cortex; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+      working-directory: .
       
     - name: Prepare Environment
       run: cp .env.example .env
+      
+    - name: Run Database Migrations
+      run: uv run alembic upgrade head
       
     - name: Run Pytest
       run: uv run pytest tests/

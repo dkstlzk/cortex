@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str | None = None
     
     # RQ Queue Configuration
-    RQ_DOC_PARSE_TIMEOUT: int = 300
-    RQ_EMBED_TIMEOUT: int = 180
+    RQ_DOC_PARSE_TIMEOUT: int = 600
+    RQ_EMBED_TIMEOUT: int = 600
     RQ_GRAPH_TIMEOUT: int = 600
     RQ_RETRY_MAX: int = 3
     RQ_RETRY_INTERVALS: str = "10,30,60"

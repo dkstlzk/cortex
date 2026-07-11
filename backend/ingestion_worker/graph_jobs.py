@@ -129,12 +129,14 @@ async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:
         {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": joined},
     ]
+    logger.info("Sending prompt to LLM for graph extraction", prompt_length=len(joined))
     raw = await generate(
         messages, 
         temperature=0.0, 
         max_tokens=settings.LLM_MAX_TOKENS,
         response_format={"type": "json_object"}
     )
+    logger.info("Received extraction response from LLM", response_length=len(raw))
     return _parse_extraction(raw)
 
 

@@ -66,8 +66,10 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
             
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i:i+batch_size]
+                logger.info("Processing embedding batch", document_id=document_id, batch_start=i, batch_size=len(batch_texts), total_chunks=len(texts))
                 batch_embeddings = embedding_service.embed_batch(batch_texts)
                 embeddings.extend(batch_embeddings)
+                logger.info("Finished embedding batch", document_id=document_id, current_total=len(embeddings))
             
             # Transition to EMBEDDED
             repo.mark_embedded(document_id, settings.EMBEDDING_MODEL, datetime.now(timezone.utc))

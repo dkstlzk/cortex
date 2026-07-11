@@ -123,8 +123,9 @@ async def create_embeddings(request: Request):
     if isinstance(texts, str):
         texts = [texts]
         
-    print(f"[FastEmbed] Embedding {len(texts)} chunks")
+    print(f"[FastEmbed] Start embedding {len(texts)} chunks")
     embeddings = list(embedding_model.embed(texts))
+    print(f"[FastEmbed] Finished embedding {len(texts)} chunks")
     
     data = []
     for i, vec in enumerate(embeddings):

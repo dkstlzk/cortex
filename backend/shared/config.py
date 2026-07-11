@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
-    LLM_TIMEOUT: float = 60.0
+    LLM_TIMEOUT: float = 300.0
     LLM_MAX_RETRIES: int = 3
 
     # Embedding Configuration
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     QDRANT_NAMESPACE_UUID: str = "12345678-1234-5678-1234-567812345678"
     
     # Model Endpoints
-    FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct-AWQ"
     FAST_MODEL_BASE_URL: str | None = None
     EMBEDDING_MODEL_ENDPOINT: str | None = None
     REMOTE_PARSER_URL: str | None = None

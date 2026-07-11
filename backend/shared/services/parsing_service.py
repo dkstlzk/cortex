@@ -24,6 +24,7 @@ class ParsedDocument:
     metadata: dict[str, Any]
     page_count: int
     docling_document: Any | None  # The in-memory DoclingDocument
+    chunks: list[dict[str, Any]] | None = None
 
 class ParsingService:
     """
@@ -106,11 +107,15 @@ class ParsingService:
                 metadata = data["metadata"]
                 page_count = data["page_count"]
                 
-                # Reconstruct DoclingDocument from dictionary
-                from docling.datamodel.document import DoclingDocument
-                docling_document = DoclingDocument.model_validate(data["docling_document_dict"])
+                # Retrieve pre-computed chunks from the gateway
+                chunks = data.get("chunks", None)
                 
-                logger.info("Remote Docling extraction completed", file_path=file_path, page_count=page_count)
+                # IMPORTANT: DO NOT import DoclingDocument here!
+                # Simply importing anything from docling.datamodel can pull in Torch/Transformers 
+                # at the module level and instantly OOM the 512MB Render instance.
+                docling_document = None
+                
+                logger.info("Remote Docling extraction completed", file_path=file_path, page_count=page_count, has_chunks=bool(chunks))
             else:
                 logger.info("Using local Docling parser")
                 converter = self._get_converter()
@@ -133,12 +138,14 @@ class ParsingService:
                 
                 docling_document = result.document
                 logger.info("Local Docling extraction completed", file_path=file_path, page_count=page_count)
+                chunks = None
                 
             return ParsedDocument(
                 markdown=markdown_content,
                 metadata=metadata,
                 page_count=page_count,
-                docling_document=docling_document
+                docling_document=docling_document,
+                chunks=chunks
             )
             
         except Exception as e:

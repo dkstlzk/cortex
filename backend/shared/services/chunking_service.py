@@ -34,10 +34,33 @@ class ChunkingService:
         """
         logger.info("Starting hierarchical chunking", document_id=document_id)
         
+        if parsed_doc.chunks:
+            # The remote gateway already chunked it! Just hydrate the deterministic IDs locally.
+            artifact_chunks = []
+            for chunk in parsed_doc.chunks:
+                heading_path = chunk.get("heading_path", "root")
+                page_str = chunk.get("page_str", "0")
+                normalized_text = chunk.get("normalized_text", chunk["text"])
+                
+                chunk_hash_input = f"{document_id}_{heading_path}_{page_str}_{normalized_text}".encode("utf-8")
+                chunk_id = hashlib.sha256(chunk_hash_input).hexdigest()
+                
+                chunk["id"] = chunk_id
+                chunk["source_document"] = document_id
+                
+                # Clean up gateway-specific keys
+                for key in ["heading_path", "page_str", "normalized_text"]:
+                    chunk.pop(key, None)
+                    
+                artifact_chunks.append(chunk)
+            
+            logger.info("Used pre-computed remote chunks", document_id=document_id, chunk_count=len(artifact_chunks))
+            return artifact_chunks
+
         docling_doc = parsed_doc.docling_document
         if not docling_doc:
             raise IngestionPipelineError(
-                message="Cannot chunk document: missing 'docling_document' in ParsedDocument.",
+                message="Cannot chunk document: missing 'docling_document' or 'chunks' in ParsedDocument.",
                 stage="Chunking"
             )
             

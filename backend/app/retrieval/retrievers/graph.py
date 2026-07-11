@@ -5,7 +5,7 @@ import structlog
 
 from backend.app.retrieval.interfaces import BaseRetriever, SearchQuery
 from backend.app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
-from backend.app.db.queries import qdrant_search, neo4j_neighbors, pg_facts
+from backend.app.db.queries import qdrant_search, neo4j_neighbors
 from backend.shared.neo4j_client import get_neo4j_async
 
 logger = structlog.get_logger(__name__)
@@ -15,12 +15,6 @@ class GraphRetriever(BaseRetriever):
     def name(self) -> str:
         return "graph"
 
-    async def _embedding_expand(self, query_embedding: List[float]) -> List[str]:
-        chunks = await qdrant_search(query_embedding, top_k=10)
-        doc_ids = [c["payload"].get("doc_id") for c in chunks if "doc_id" in c.get("payload", {})]
-        facts = await pg_facts(doc_ids)
-        tags = list(set([f["subject_tag"] for f in facts if "subject_tag" in f]))
-        return tags
 
     async def _type_based_expand(self, tag: str) -> List[str]:
         query = """
@@ -52,9 +46,7 @@ class GraphRetriever(BaseRetriever):
         for tag in ctx.implicit_tags:
             seeds[tag] = seeds.get(tag, 0.0) + 0.8
             
-        embed_tags = await self._embedding_expand(ctx.query_embedding)
-        for tag in embed_tags:
-            seeds[tag] = seeds.get(tag, 0.0) + 0.5
+
             
         if ctx.query_type == QueryType.DIAGNOSTIC and ctx.explicit_tags:
             for tag in ctx.explicit_tags:

@@ -5,7 +5,7 @@ import structlog
 
 from backend.app.retrieval.interfaces import BaseRetriever, SearchQuery
 from backend.app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
-from backend.app.db.queries import qdrant_search, neo4j_neighbors
+from backend.app.db.queries import neo4j_neighbors
 from backend.shared.neo4j_client import get_neo4j_async
 
 logger = structlog.get_logger(__name__)

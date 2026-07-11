@@ -32,7 +32,7 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 # --- Async Postgres (for FastAPI / P2) ---
-_async_pg_url = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+_async_pg_url = settings.postgres_dsn
 pg_pool = AsyncConnectionPool(_async_pg_url, open=False)
 
 async def init_db_pools():

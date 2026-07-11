@@ -51,20 +51,23 @@ async def pg_facts(doc_ids: List[str]) -> List[Dict[str, Any]]:
             ]
 
 async def pg_resolve_entities(text: str) -> List[str]:
-    """Resolve entities in text using ILIKE against entity_aliases."""
+    """Resolve entities in text by searching Neo4j for tag or name matches."""
     if not text:
         return []
         
-    query = "SELECT canonical_tag FROM entity_aliases WHERE %s ILIKE '%%' || alias || '%%'"
+    query = """
+    MATCH (n:Entity) 
+    WHERE toLower($text) CONTAINS toLower(n.tag) OR toLower($text) CONTAINS toLower(n.name) 
+    RETURN n.tag LIMIT 10
+    """
     
     try:
-        async with pg_pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(query, (text,))
-                rows = await cur.fetchall()
-                return list(set(row[0] for row in rows))
+        driver = get_neo4j_async()
+        async with driver.session() as session:
+            result = await session.run(query, text=text)
+            records = await result.data()
+            return [rec["n.tag"] for rec in records if "n.tag" in rec]
     except Exception as e:
-        # Fallback if table is missing or query fails
         import structlog
         logger = structlog.get_logger(__name__)
         logger.warning("Entity resolution query failed", error=str(e))

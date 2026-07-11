@@ -121,7 +121,7 @@ class GraphRetriever(BaseRetriever):
     async def _get_node_edges(self, tag: str) -> List[Edge]:
         query = """
         MATCH (n {tag: $tag})-[r]->(m)
-        RETURN m.tag as target_tag, type(r) as rel_type, r.confidence as confidence, r.source_doc_id as source_doc_id
+        RETURN m.tag as target_tag, type(r) as rel_type, r.confidence as confidence
         LIMIT 20
         """
         try:

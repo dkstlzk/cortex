@@ -28,10 +28,14 @@ def upgrade() -> None:
     graph_job_status_enum = sa.Enum('SUCCESS', 'FAILED', 'SKIPPED', name='graphjobstatus')
     graph_job_status_enum.create(op.get_bind(), checkfirst=True)
     
-    try:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    has_column = False
+    if 'documents' in insp.get_table_names():
+        has_column = any(c['name'] == 'graph_job_status' for c in insp.get_columns('documents'))
+        
+    if has_column:
         op.drop_column('documents', 'graph_job_status')
-    except Exception:
-        pass # Ignore if it doesn't exist
         
     op.add_column('documents', sa.Column('graph_job_status', graph_job_status_enum, nullable=True))
 

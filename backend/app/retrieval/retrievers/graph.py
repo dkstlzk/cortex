@@ -24,10 +24,9 @@ class GraphRetriever(BaseRetriever):
 
     async def _type_based_expand(self, tag: str) -> List[str]:
         query = """
-        MATCH (n {tag: $tag})
-        WITH labels(n) AS lbls
-        MATCH (m)
-        WHERE any(lbl IN lbls WHERE lbl IN labels(m)) AND m.tag <> $tag
+        MATCH (n:Entity {tag: $tag})
+        MATCH (m:Entity {type: n.type})
+        WHERE m.tag <> $tag
         RETURN m.tag as tag LIMIT 10
         """
         try:

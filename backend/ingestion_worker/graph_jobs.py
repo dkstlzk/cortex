@@ -32,35 +32,24 @@ from datetime import datetime, timezone
 
 logger = structlog.get_logger(__name__)
 
-# Allow-lists constrain what the LLM can write into the graph schema, preventing
-# hallucinated labels/relationship types from polluting Neo4j.
-ALLOWED_NODE_TYPES = {
-    "equipment", "document", "procedure", "system", "component", "failure_mode",
-}
-DEFAULT_NODE_TYPE = "component"
-
-ALLOWED_REL_TYPES = {
-    "PART_OF", "CONNECTED_TO", "FEEDS", "CONTAINS", "DOCUMENTED_BY",
-    "MAINTAINED_BY", "SUSCEPTIBLE_TO", "CAUSES", "REDUNDANT_WITH",
-    "REFERENCES", "APPLIES_TO", "SUPPLIES", "RELATED_TO",
-}
+# We allow dynamic extraction of entities and relationships to support any domain.
+DEFAULT_NODE_TYPE = "entity"
 DEFAULT_REL_TYPE = "RELATED_TO"
 
 _EXTRACTION_SYSTEM_PROMPT = (
-    "You are an information-extraction engine for industrial equipment "
-    "documentation (manuals, maintenance records, P&IDs). Extract the entities "
-    "and relationships described in the text.\n\n"
+    "You are an intelligent knowledge graph extraction engine. Read the following text "
+    "and extract the key entities and the relationships between them. Adapt the entity "
+    "and relationship types to perfectly match the domain of the document (e.g., software, "
+    "medical, industrial, financial).\n\n"
     "Return STRICT JSON only, no prose, no markdown fences, with this shape:\n"
     "{\n"
-    '  "entities": [{"tag": "P-101A", "name": "Centrifugal Pump P-101A", '
-    '"type": "equipment"}],\n'
-    '  "relationships": [{"source": "P-101A", "target": "V-201", '
-    '"type": "FEEDS", "confidence": 0.9}]\n'
+    '  "entities": [{"tag": "Unique_ID_1", "name": "Readable Name", "type": "concept"}],\n'
+    '  "relationships": [{"source": "Unique_ID_1", "target": "Unique_ID_2", '
+    '"type": "DEPENDS_ON", "confidence": 0.9}]\n'
     "}\n\n"
-    f"`type` for entities MUST be one of: {sorted(ALLOWED_NODE_TYPES)}.\n"
-    f"`type` for relationships SHOULD be one of: {sorted(ALLOWED_REL_TYPES)}.\n"
-    "`tag` is a short canonical identifier (e.g. an equipment tag like 'P-101A' "
-    "or a slug). Reuse the exact same tag for an entity everywhere it appears. "
+    "`type` for entities should be a lowercase generic category (e.g., 'algorithm', 'component', 'person').\n"
+    "`type` for relationships must be UPPERCASE_WITH_UNDERSCORES (e.g., 'USES', 'PART_OF').\n"
+    "`tag` is a short canonical identifier (e.g. an acronym, a slug, or exact name). Reuse the exact same tag for an entity everywhere it appears. "
     "confidence is a float in [0,1]. If nothing is extractable, return empty lists."
 )
 
@@ -115,12 +104,12 @@ def _parse_extraction(raw: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _norm_node_type(value: Any) -> str:
     t = str(value or "").strip().lower().replace(" ", "_")
-    return t if t in ALLOWED_NODE_TYPES else DEFAULT_NODE_TYPE
+    return t if t else DEFAULT_NODE_TYPE
 
 
 def _norm_rel_type(value: Any) -> str:
     r = str(value or "").strip().upper().replace(" ", "_").replace("-", "_")
-    return r if r in ALLOWED_REL_TYPES else DEFAULT_REL_TYPE
+    return r if r else DEFAULT_REL_TYPE
 
 
 async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:

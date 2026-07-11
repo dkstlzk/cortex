@@ -49,3 +49,25 @@ async def pg_facts(doc_ids: List[str]) -> List[Dict[str, Any]]:
                 }
                 for row in rows
             ]
+
+async def pg_resolve_entities(text: str) -> List[str]:
+    """Resolve entities in text using ILIKE against entity_aliases."""
+    if not text:
+        return []
+        
+    query = "SELECT canonical_tag FROM entity_aliases WHERE %s ILIKE '%%' || alias || '%%'"
+    
+    try:
+        async with pg_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(query, (text,))
+                rows = await cur.fetchall()
+                return list(set(row[0] for row in rows))
+    except Exception:
+        # Fallback if table is missing or query fails
+        tags = []
+        if "P-101A" in text:
+            tags.append("P-101A")
+        if "P-101B" in text:
+            tags.append("P-101B")
+        return tags

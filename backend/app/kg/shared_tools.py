@@ -1,6 +1,8 @@
 from typing import Optional, List, Any
 from backend.app.retrieval.models import QueryType, Chunk, GraphContext
-from backend.app.retrieval.pathways import graph_pathway
+from backend.app.retrieval.interfaces import SearchQuery
+from backend.app.retrieval.retrievers.graph import GraphRetriever
+from backend.app.retrieval.orchestrator import get_context_assembler
 
 # Knowledge graph retrieval tool exposed to P3.
 async def context_graph_query(
@@ -14,23 +16,22 @@ async def context_graph_query(
     'auto': shallow for Asset (history mode)/Comply, deep for Diagnose.
     """
     
-    # We resolve "auto" based on context, here we mock the choice
     if depth == "auto":
         depth = "shallow"
         
-    # The agent provides the tag. We treat the agent's question as the query.
-    # We'll pass the agent's explicit tag as the focused_tag for traversal context
+    q_type = QueryType.DIAGNOSTIC if depth == "deep" else QueryType.FACTUAL
     
-    # query_type for Agent calls usually maps to OPEN or DIAGNOSTIC. 
-    # Let's mock it to DIAGNOSTIC for now if not provided
-    q_type = QueryType.DIAGNOSTIC
-    
-    passages = await graph_pathway(
-        query=query, 
-        query_type=q_type, 
+    search_query = SearchQuery(
+        text=query, 
         session_id="agent_session", 
         focused_tag=tag, 
-        depth_mode=depth
+        query_type=q_type
     )
+    
+    assembler = get_context_assembler()
+    traversal_context = await assembler.assemble(search_query)
+    
+    retriever = GraphRetriever()
+    passages = await retriever.retrieve(search_query, traversal_context)
     
     return GraphContext(passages=passages)

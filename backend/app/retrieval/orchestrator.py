@@ -7,7 +7,7 @@ from backend.app.retrieval.pipeline import DefaultRetrievalPipeline
 from backend.app.retrieval.fusion import ReciprocalRankFusion
 from backend.app.retrieval.prompt_builder import PromptBuilder, CitedAnswer
 from backend.app.retrieval.retrievers.dense import DenseRetriever
-from backend.app.retrieval.retrievers.keyword import KeywordRetriever
+# from backend.app.retrieval.retrievers.keyword import KeywordRetriever
 from backend.app.retrieval.retrievers.graph import GraphRetriever
 from backend.shared.services.embedding_service import get_embedding_service
 
@@ -21,7 +21,7 @@ def get_fusion_strategy() -> ReciprocalRankFusion:
 
 def get_retrieval_pipeline() -> DefaultRetrievalPipeline:
     return DefaultRetrievalPipeline(
-        retrievers=[DenseRetriever(), KeywordRetriever(), GraphRetriever()],
+        retrievers=[DenseRetriever(), GraphRetriever()],
         fusion_strategy=get_fusion_strategy(),
         context_assembler=get_context_assembler()
     )

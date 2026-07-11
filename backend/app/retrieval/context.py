@@ -3,7 +3,7 @@ import os
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
 from backend.app.retrieval.interfaces import SearchQuery
-from backend.app.db.queries import pg_facts
+from backend.app.db.queries import pg_facts, pg_resolve_entities
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -45,14 +45,7 @@ class ContextAssembler:
         )
 
     async def resolve_entities(self, text: str) -> List[str]:
-        # Very naive mock of entity resolution.
-        # In a real system, we would use an NER model or fuzzy match against entity_registry
-        tags = []
-        if "P-101A" in text:
-            tags.append("P-101A")
-        if "P-101B" in text:
-            tags.append("P-101B")
-        return tags
+        return await pg_resolve_entities(text)
 
     async def get_recent_messages(self, session_id: str, limit: int = 5) -> List[str]:
         # Mocking chat history fetch from DB for now

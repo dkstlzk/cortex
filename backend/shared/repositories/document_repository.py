@@ -53,6 +53,11 @@ class DocumentRepository:
             document_id = uuid.UUID(document_id)
         return self.db.query(Document).filter(Document.id == document_id).first()
 
+    def get_by_id_for_update(self, document_id: str | uuid.UUID) -> Document | None:
+        if isinstance(document_id, str):
+            document_id = uuid.UUID(document_id)
+        return self.db.query(Document).filter(Document.id == document_id).with_for_update().first()
+
     def update_status(self, document_id: str | uuid.UUID, status: str) -> None:
         """Updates just the status of a document."""
         doc = self.get_by_id(document_id)
@@ -84,7 +89,7 @@ class DocumentRepository:
                 doc.status = "FAILED"
 
     def mark_embedded(self, document_id: str | uuid.UUID, model_name: str, embedded_at) -> None:
-        doc = self.get_by_id(document_id)
+        doc = self.get_by_id_for_update(document_id)
         if doc:
             doc.embedding_model = model_name
             doc.embedded_at = embedded_at
@@ -94,20 +99,20 @@ class DocumentRepository:
             
     def mark_graph_skipped(self, document_id: str | uuid.UUID) -> None:
         """Marks the graph job as skipped."""
-        doc = self.get_by_id(document_id)
+        doc = self.get_by_id_for_update(document_id)
         if doc:
             doc.graph_job_status = GraphJobStatus.SKIPPED
             self._check_convergence(doc)
 
     def mark_graph_failed(self, document_id: str | uuid.UUID) -> None:
         """Marks the graph job as failed."""
-        doc = self.get_by_id(document_id)
+        doc = self.get_by_id_for_update(document_id)
         if doc:
             doc.graph_job_status = GraphJobStatus.FAILED
             self._check_convergence(doc)
 
     def mark_graph_built(self, document_id: str | uuid.UUID, graph_built_at) -> None:
-        doc = self.get_by_id(document_id)
+        doc = self.get_by_id_for_update(document_id)
         if doc:
             doc.graph_built_at = graph_built_at
             doc.graph_job_status = GraphJobStatus.SUCCESS

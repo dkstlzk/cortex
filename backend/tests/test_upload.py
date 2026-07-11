@@ -6,6 +6,7 @@ from backend.fabric_api.main import app
 from backend.shared.database import Base, engine, SessionLocal
 from backend.shared.models.document import Document
 from backend.shared.redis_client import get_queue
+from backend.shared.security import verify_jwt
 from unittest.mock import MagicMock
 
 client = TestClient(app)
@@ -29,8 +30,10 @@ def mock_redis_queue():
     mock_job.id = "mock_job_id"
     mock_queue.enqueue.return_value = mock_job
     app.dependency_overrides[get_queue] = lambda: mock_queue
+    app.dependency_overrides[verify_jwt] = lambda: {"sub": "test_user"}
     yield mock_queue
     app.dependency_overrides.pop(get_queue, None)
+    app.dependency_overrides.pop(verify_jwt, None)
 
 def test_upload_pdf(tmp_path, mock_redis_queue):
     """

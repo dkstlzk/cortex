@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import structlog
@@ -10,6 +10,7 @@ from backend.fabric_api.middleware import StructlogRequestMiddleware
 from backend.fabric_api.exception_handlers import cortex_error_handler, generic_exception_handler
 from backend.fabric_api.routes import health, upload
 from backend.shared.constants import API_V1_PREFIX
+from backend.shared.security import verify_jwt
 
 logger = structlog.get_logger(__name__)
 
@@ -40,15 +41,14 @@ def create_app() -> FastAPI:
     # Health router is usually public
     app.include_router(health.router, prefix=API_V1_PREFIX)
     
-    # TODO: Implement JWT authentication before production deployment.
-    # Authentication is explicitly DISABLED for this demo environment.
-    app.include_router(upload.router, prefix=API_V1_PREFIX)
+    # Authentication is now enabled.
+    app.include_router(upload.router, prefix=API_V1_PREFIX, dependencies=[Depends(verify_jwt)])
     
     # Include P2/P3 application routers
     from backend.app.api import query, agents, graph
-    app.include_router(query.router, prefix=API_V1_PREFIX, tags=["query"])
-    app.include_router(agents.router, prefix=f"{API_V1_PREFIX}/agents", tags=["agents"])
-    app.include_router(graph.router, prefix=API_V1_PREFIX, tags=["graph"])
+    app.include_router(query.router, prefix=API_V1_PREFIX, tags=["query"], dependencies=[Depends(verify_jwt)])
+    app.include_router(agents.router, prefix=f"{API_V1_PREFIX}/agents", tags=["agents"], dependencies=[Depends(verify_jwt)])
+    app.include_router(graph.router, prefix=API_V1_PREFIX, tags=["graph"], dependencies=[Depends(verify_jwt)])
 
     return app
 

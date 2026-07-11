@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
     FAST_MODEL_BASE_URL: str | None = None
     EMBEDDING_MODEL_ENDPOINT: str | None = None
+    REMOTE_PARSER_URL: str | None = None
     
     # Storage Configuration
     BASE_DIR: Path = Path(__file__).resolve().parent.parent

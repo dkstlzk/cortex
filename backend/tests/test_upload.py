@@ -9,7 +9,10 @@ from backend.shared.redis_client import get_queue
 from backend.shared.security import verify_jwt
 from unittest.mock import MagicMock
 
-client = TestClient(app)
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        yield c
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
@@ -35,7 +38,7 @@ def mock_redis_queue():
     app.dependency_overrides.pop(get_queue, None)
     app.dependency_overrides.pop(verify_jwt, None)
 
-def test_upload_pdf(tmp_path, mock_redis_queue):
+def test_upload_pdf(client, tmp_path, mock_redis_queue):
     """
     Test uploading a valid PDF document.
     """
@@ -67,7 +70,7 @@ def test_upload_pdf(tmp_path, mock_redis_queue):
         # Safe cleanup: Delete ONLY the document created by this test
         db.delete(doc)
         db.commit()
-def test_upload_invalid_mime(tmp_path, mock_redis_queue):
+def test_upload_invalid_mime(client, tmp_path, mock_redis_queue):
     """
     Test uploading a non-PDF file.
     """

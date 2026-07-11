@@ -72,11 +72,18 @@ async def pg_resolve_entities(text: str) -> List[str]:
 
 async def get_redis_session_history(session_id: str, limit: int = 5) -> List[str]:
     """Fetch recent message history from Redis."""
-    from backend.shared.redis_client import get_redis
-    redis = get_redis()
+    from backend.shared.redis_client import redis_conn
+    import asyncio
     key = f"session:{session_id}:history"
     try:
-        messages = await redis.lrange(key, -limit, -1)
+        messages = await asyncio.to_thread(redis_conn.lrange, key, -limit, -1)
         return [msg.decode('utf-8') for msg in messages if msg]
     except Exception:
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.warning(
+            "Failed to fetch Redis session history",
+            session_id=session_id,
+            exc_info=True,
+        )
         return []

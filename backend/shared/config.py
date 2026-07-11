@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     LLM_BASE_URL: Optional[str] = None
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_TEMPERATURE: float = 0.3
-    LLM_MAX_TOKENS: int = 2048
+    LLM_MAX_TOKENS: int = 4096
     LLM_TIMEOUT: float = 60.0
     LLM_MAX_RETRIES: int = 3
 

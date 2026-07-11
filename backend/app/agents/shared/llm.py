@@ -64,6 +64,7 @@ async def generate(
     model: Optional[str] = None,
     temperature: float = settings.LLM_TEMPERATURE,
     max_tokens: int = 1024,
+    response_format: Optional[Dict[str, str]] = None,
 ) -> str:
     """
     Non-streaming LLM call. Returns the complete response text.
@@ -71,12 +72,17 @@ async def generate(
     Used by the Supervisor for routing classification and by the Copilot
     for trigger evaluation where streaming is not needed.
     """
+    kwargs = {}
+    if response_format:
+        kwargs["response_format"] = response_format
+        
     response = await _client.chat.completions.create(
         model=model or LLM_MODEL,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
+        **kwargs
     )
     
     # Explicitly return only message.content, ignoring message.reasoning_content

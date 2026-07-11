@@ -90,10 +90,22 @@ def _parse_extraction(raw: str) -> Dict[str, List[Dict[str, Any]]]:
         # Last resort: grab the outermost JSON object.
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
+            logger.warning(
+                "graph_extraction_parse_failed_no_json",
+                response_length=len(raw),
+                first_500=raw[:500],
+                last_500=raw[-500:] if len(raw) > 500 else "",
+            )
             return {"entities": [], "relationships": []}
         try:
             data = json.loads(match.group(0))
         except json.JSONDecodeError:
+            logger.warning(
+                "graph_extraction_parse_failed_decode_error",
+                response_length=len(raw),
+                first_500=raw[:500],
+                last_500=raw[-500:] if len(raw) > 500 else "",
+            )
             return {"entities": [], "relationships": []}
     return {
         "entities": data.get("entities", []) or [],
@@ -117,7 +129,12 @@ async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:
         {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": joined},
     ]
-    raw = await generate(messages, temperature=0.0, max_tokens=settings.LLM_MAX_TOKENS)
+    raw = await generate(
+        messages, 
+        temperature=0.0, 
+        max_tokens=settings.LLM_MAX_TOKENS,
+        response_format={"type": "json_object"}
+    )
     return _parse_extraction(raw)
 
 

@@ -2,7 +2,6 @@ import structlog
 import hashlib
 from typing import Any
 from functools import lru_cache
-from docling.chunking import HierarchicalChunker
 from backend.shared.services.parsing_service import ParsedDocument
 from backend.shared.exceptions import IngestionPipelineError
 
@@ -17,7 +16,13 @@ class ChunkingService:
     def __init__(self):
         # We can cache or lazily instantiate chunker models here if we switch to 
         # ML-based chunking later. HierarchicalChunker is currently deterministic and light.
-        self._chunker = HierarchicalChunker()
+        self._chunker = None
+        
+    def _get_chunker(self):
+        if self._chunker is None:
+            from docling.chunking import HierarchicalChunker
+            self._chunker = HierarchicalChunker()
+        return self._chunker
         
     def chunk_document(self, document_id: str, parsed_doc: ParsedDocument) -> list[dict[str, Any]]:
         """
@@ -38,7 +43,8 @@ class ChunkingService:
             
         try:
             # Execute chunking directly on the in-memory object
-            chunks_iter = self._chunker.chunk(docling_doc)
+            chunker = self._get_chunker()
+            chunks_iter = chunker.chunk(docling_doc)
             
             # Map into our artifact schema with deterministic IDs
             artifact_chunks = []

@@ -57,20 +57,20 @@ async def _classify_query_with_fallback(query: str) -> QueryType:
 async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]:
     if EMBEDDING_MODEL_ENDPOINT:
         try:
-            client = AsyncOpenAI(
+            async with AsyncOpenAI(
                 api_key=FAST_MODEL_API_KEY or "dummy",
                 base_url=EMBEDDING_MODEL_ENDPOINT,
-            )
-            response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
-            return response.data[0].embedding
+            ) as client:
+                response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
+                return response.data[0].embedding
         except Exception:
             logger.warning("Custom embedding endpoint failed; trying fallback")
 
     if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
         try:
-            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
-            response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
-            return response.data[0].embedding
+            async with AsyncOpenAI(api_key=FAST_MODEL_API_KEY) as client:
+                response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
+                return response.data[0].embedding
         except Exception:
             logger.warning("OpenAI embeddings failed; trying local embedding service")
 

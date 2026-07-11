@@ -1,3 +1,9 @@
+"""
+Deprecated.
+Unused after migration to app.agents.shared.llm.
+Scheduled for removal.
+"""
+
 import os
 from typing import Optional
 

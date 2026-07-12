@@ -2,6 +2,8 @@ import hashlib
 import uuid
 import boto3
 import structlog
+import os
+import shutil
 from botocore.client import Config
 from fastapi import UploadFile
 
@@ -17,6 +19,14 @@ class StorageManager:
     def __init__(self):
         self.bucket = settings.S3_BUCKET_NAME
         
+        # Check if we should fallback to local storage
+        self.use_local = not bool(settings.S3_ACCESS_KEY_ID)
+        if self.use_local:
+            self.upload_dir = settings.UPLOAD_DIR
+            os.makedirs(self.upload_dir, exist_ok=True)
+            logger.info("S3 credentials not found, falling back to local disk storage", upload_dir=str(self.upload_dir))
+            return
+            
         # Configure boto3 client
         client_kwargs = {}
         if settings.S3_ENDPOINT_URL:
@@ -66,10 +76,18 @@ class StorageManager:
                 sha256_hash.update(chunk)
                 
         try:
-            self.s3_client.upload_file(temp_path, self.bucket, object_key)
-            s3_uri = f"s3://{self.bucket}/{object_key}"
-            logger.info("Original file uploaded to S3 and hashed", s3_uri=s3_uri)
-            return s3_uri, sha256_hash.hexdigest()
+            if self.use_local:
+                local_dir = self.upload_dir / str(document_id)
+                os.makedirs(local_dir, exist_ok=True)
+                target_path = local_dir / stored_filename
+                shutil.move(temp_path, str(target_path))
+                logger.info("Original file saved to local storage and hashed", local_path=str(target_path))
+                return str(target_path), sha256_hash.hexdigest()
+            else:
+                self.s3_client.upload_file(temp_path, self.bucket, object_key)
+                s3_uri = f"s3://{self.bucket}/{object_key}"
+                logger.info("Original file uploaded to S3 and hashed", s3_uri=s3_uri)
+                return s3_uri, sha256_hash.hexdigest()
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -78,6 +96,16 @@ class StorageManager:
         """
         Deletes all objects in S3 matching the document's prefix.
         """
+        if self.use_local:
+            local_dir = self.upload_dir / str(document_id)
+            if local_dir.exists() and local_dir.is_dir():
+                try:
+                    shutil.rmtree(str(local_dir))
+                    logger.info("Document artifacts deleted from local storage", document_id=str(document_id))
+                except Exception as e:
+                    logger.error("Failed to delete document artifacts from local storage", error=str(e), document_id=str(document_id))
+            return
+            
         prefix = f"{document_id}/"
         try:
             # Paginate through all objects with the prefix and delete them
@@ -99,9 +127,18 @@ class StorageManager:
         Saves a parsed artifact (like parsed.md or metadata.json) directly to S3.
         Returns the S3 URI.
         """
-        object_key = self.get_object_key(document_id, filename)
-        
         body = content.encode('utf-8') if isinstance(content, str) else content
+        
+        if self.use_local:
+            local_dir = self.upload_dir / str(document_id)
+            os.makedirs(local_dir, exist_ok=True)
+            target_path = local_dir / filename
+            with open(target_path, "wb") as f:
+                f.write(body)
+            logger.info("Artifact saved to local storage", local_path=str(target_path))
+            return str(target_path)
+            
+        object_key = self.get_object_key(document_id, filename)
         
         self.s3_client.put_object(
             Bucket=self.bucket,

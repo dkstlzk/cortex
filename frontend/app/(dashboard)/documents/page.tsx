@@ -54,35 +54,6 @@ export default function DocumentsPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    listDocuments().then((docs) => {
-      if (!active) return;
-      const initialFiles = docs.map((d) => {
-        const overall = (d.overall_status || '').toUpperCase();
-        return {
-          id: d.document_id,
-          name: d.filename,
-          size: 0,
-          status: overall === 'COMPLETED' ? 'complete' : overall === 'FAILED' ? 'error' : 'processing',
-          documentId: d.document_id,
-          stage: d.overall_status,
-          graphStatus: d.graph_job_status,
-          pageCount: d.page_count,
-          chunkCount: d.chunk_count,
-          error: overall === 'FAILED' ? (d.error_message || 'Ingestion failed') : undefined,
-        } as UploadedFile;
-      });
-      setFiles(initialFiles);
-      initialFiles.forEach(f => {
-        if (f.status === 'processing' && f.documentId) {
-          pollStatus(f.id, f.documentId);
-        }
-      });
-    }).catch(console.error);
-    return () => { active = false; };
-  }, [pollStatus]);
-
   const patch = useCallback((id: string, next: Partial<UploadedFile>) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...next } : f)));
   }, []);
@@ -115,6 +86,38 @@ export default function DocumentsPage() {
         }
       });
   }, [patch]);
+
+  // Load the existing library on mount and resume polling for any doc still
+  // in-flight. Declared after pollStatus so it can reference it without hitting
+  // the temporal dead zone.
+  useEffect(() => {
+    let active = true;
+    listDocuments().then((docs) => {
+      if (!active) return;
+      const initialFiles = docs.map((d) => {
+        const overall = (d.overall_status || '').toUpperCase();
+        return {
+          id: d.document_id,
+          name: d.filename,
+          size: 0,
+          status: overall === 'COMPLETED' ? 'complete' : overall === 'FAILED' ? 'error' : 'processing',
+          documentId: d.document_id,
+          stage: d.overall_status,
+          graphStatus: d.graph_job_status,
+          pageCount: d.page_count,
+          chunkCount: d.chunk_count,
+          error: overall === 'FAILED' ? (d.error_message || 'Ingestion failed') : undefined,
+        } as UploadedFile;
+      });
+      setFiles(initialFiles);
+      initialFiles.forEach(f => {
+        if (f.status === 'processing' && f.documentId) {
+          pollStatus(f.id, f.documentId);
+        }
+      });
+    }).catch(console.error);
+    return () => { active = false; };
+  }, [pollStatus]);
 
   const handleUpload = async (file: File) => {
     const id = `${file.name}-${Date.now()}`;

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 import structlog
 import uuid
+from typing import List
 from sqlalchemy.orm import Session
 
 from backend.fabric_api.schemas.upload import UploadResponse, DocumentStatusResponse
@@ -29,6 +30,29 @@ def upload_document(
         job_id=job_id,
         status=status
     )
+
+@router.get("/documents", response_model=List[DocumentStatusResponse])
+def list_documents(db: Session = Depends(get_db)):
+    """
+    Returns a list of all uploaded documents.
+    """
+    repo = DocumentRepository(db)
+    docs = repo.list_all()
+    
+    return [
+        DocumentStatusResponse(
+            document_id=doc.id,
+            filename=doc.filename,
+            overall_status=doc.status,
+            graph_job_status=doc.graph_job_status.value if doc.graph_job_status else None,
+            error_message=doc.error_message,
+            page_count=doc.page_count,
+            chunk_count=doc.chunk_count,
+            uploaded_at=doc.uploaded_at.isoformat(),
+            updated_at=doc.updated_at.isoformat()
+        )
+        for doc in docs
+    ]
 
 @router.get("/status/{document_id}", response_model=DocumentStatusResponse)
 def get_document_status(

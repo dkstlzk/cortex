@@ -100,6 +100,10 @@ export async function getDocumentStatus(documentId: string): Promise<DocumentSta
   return apiFetch<DocumentStatus>(`/status/${encodeURIComponent(documentId)}`);
 }
 
+export async function listDocuments(): Promise<DocumentStatus[]> {
+  return apiFetch<DocumentStatus[]>('/documents');
+}
+
 // ---------------------------------------------------------------------------
 // Knowledge graph (real structured /graph endpoint, backed by Neo4j)
 // ---------------------------------------------------------------------------

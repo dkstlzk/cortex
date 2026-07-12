@@ -22,8 +22,22 @@ def reset_postgres():
     Base.metadata.create_all(bind=engine)
     print("Recreated PostgreSQL tables.")
 
+from rq import Queue
+
 def reset_redis():
-    print("Flushing Redis...")
+    print("Flushing Redis and clearing queues...")
+    try:
+        # Explicitly empty the queue so workers stop grabbing jobs
+        q = Queue('ingestion_queue', connection=redis_conn)
+        q.empty()
+        
+        # Clear RQ registries (failed, started, etc)
+        from rq.registry import FailedJobRegistry, StartedJobRegistry
+        FailedJobRegistry(queue=q).cleanup()
+        StartedJobRegistry(queue=q).cleanup()
+    except Exception as e:
+        print(f"Queue cleanup error: {e}")
+        
     redis_conn.flushall()
     print("Redis flushed successfully.")
 
@@ -51,11 +65,21 @@ def reset_qdrant():
     )
     print("Qdrant collection created.")
 
+def reset_storage():
+    print("Resetting local artifact storage...")
+    import shutil
+    upload_dir = settings.UPLOAD_DIR
+    if upload_dir.exists():
+        shutil.rmtree(upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    print("Local artifact storage cleared.")
+
 if __name__ == "__main__":
     print("Starting full database reset...")
     reset_redis()
     reset_neo4j()
     reset_qdrant()
+    reset_storage()
     # Postgres is reset last
     reset_postgres()
-    print("All databases have been successfully cleared and initialized!")
+    print("All databases and storage have been successfully cleared and initialized!")

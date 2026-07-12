@@ -6,15 +6,16 @@ import { FolderCog, CheckCircle2, CloudUpload, File, AlertCircle, Loader2 } from
 import { FadeIn } from '@/components/animations/fade-in';
 import { useAuth } from '@/lib/auth-context';
 import { PageTransition } from '@/components/animations/page-transition';
-import { uploadDocument, getDocumentStatus } from '@/lib/api';
+import { uploadDocument, getDocumentStatus, listDocuments } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /** Ordered ingestion pipeline the backend drives a document through. */
-const STAGES = ['UPLOADED', 'PARSED', 'EMBEDDED', 'COMPLETED'] as const;
+const STAGES = ['UPLOADED', 'PARSED', 'EMBEDDED', 'GRAPH_BUILT', 'COMPLETED'] as const;
 const STAGE_LABELS: Record<string, string> = {
   UPLOADED: 'Uploaded',
   PARSED: 'Parsed',
   EMBEDDED: 'Embedded',
+  GRAPH_BUILT: 'Graph Built',
   COMPLETED: 'Indexed',
   FAILED: 'Failed',
 };
@@ -52,6 +53,35 @@ export default function DocumentsPage() {
       timerSet.forEach(clearTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    listDocuments().then((docs) => {
+      if (!active) return;
+      const initialFiles = docs.map((d) => {
+        const overall = (d.overall_status || '').toUpperCase();
+        return {
+          id: d.document_id,
+          name: d.filename,
+          size: 0,
+          status: overall === 'COMPLETED' ? 'complete' : overall === 'FAILED' ? 'error' : 'processing',
+          documentId: d.document_id,
+          stage: d.overall_status,
+          graphStatus: d.graph_job_status,
+          pageCount: d.page_count,
+          chunkCount: d.chunk_count,
+          error: overall === 'FAILED' ? (d.error_message || 'Ingestion failed') : undefined,
+        } as UploadedFile;
+      });
+      setFiles(initialFiles);
+      initialFiles.forEach(f => {
+        if (f.status === 'processing' && f.documentId) {
+          pollStatus(f.id, f.documentId);
+        }
+      });
+    }).catch(console.error);
+    return () => { active = false; };
+  }, [pollStatus]);
 
   const patch = useCallback((id: string, next: Partial<UploadedFile>) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...next } : f)));

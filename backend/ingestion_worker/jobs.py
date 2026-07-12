@@ -48,8 +48,12 @@ def process_document_job(document_id: str, stored_path: str) -> dict[str, Any]:
             # Free the massive Docling object early now that chunking is done
             parsed_doc.docling_document = None
             
-            # 5. Save Chunking Artifacts to Disk
-            storage_manager.save_artifact(document_id, "chunks.json", json.dumps(chunks, indent=2))
+            # 5. Save Chunking Artifacts to Disk (NDJSON to prevent memory OOM)
+            chunks_path = storage_manager.get_document_dir(document_id) / "chunks.jsonl"
+            with chunks_path.open("w", encoding="utf-8") as f:
+                for chunk in chunks:
+                    f.write(json.dumps(chunk) + "\n")
+            logger.info("Artifact saved to disk", stored_path=str(chunks_path))
             
             # 6. Update DB to PARSED (End of ingestion pipeline)
             repo.update_parsing_results(

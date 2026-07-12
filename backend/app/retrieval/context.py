@@ -1,16 +1,22 @@
 from typing import List, Optional
 from openai import AsyncOpenAI
 from backend.app.retrieval.models import TraversalContext, QueryType
-from backend.app.db.queries import pg_facts
+from backend.app.retrieval.interfaces import SearchQuery
+from backend.app.db.queries import pg_resolve_entities, get_redis_session_history
 from backend.shared.config import settings
+import os
+import structlog
+import httpx
 
+logger = structlog.get_logger(__name__)
 # OpenAI-compatible client for the fast query classifier. Key, base URL, and
 # model all come from the single central settings object so the P2 retrieval
 # layer and the P3 agent layer target the exact same LLM endpoint.
 openai_client = AsyncOpenAI(
     api_key=settings.fast_model_api_key or "dummy",
     max_retries=settings.LLM_MAX_RETRIES,
-    timeout=settings.LLM_TIMEOUT,
+    timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0),
+    default_headers={"ngrok-skip-browser-warning": "1"},
     **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
 )
 
@@ -53,20 +59,22 @@ async def _classify_query_with_fallback(query: str) -> QueryType:
 async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]:
     if EMBEDDING_MODEL_ENDPOINT:
         try:
-            client = AsyncOpenAI(
+            async with AsyncOpenAI(
                 api_key=FAST_MODEL_API_KEY or "dummy",
                 base_url=EMBEDDING_MODEL_ENDPOINT,
-            )
-            response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
-            return response.data[0].embedding
+                timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0),
+                default_headers={"ngrok-skip-browser-warning": "1"}
+            ) as client:
+                response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
+                return response.data[0].embedding
         except Exception:
             logger.warning("Custom embedding endpoint failed; trying fallback")
 
     if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
         try:
-            client = AsyncOpenAI(api_key=FAST_MODEL_API_KEY)
-            response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
-            return response.data[0].embedding
+            async with AsyncOpenAI(api_key=FAST_MODEL_API_KEY, timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0)) as client:
+                response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
+                return response.data[0].embedding
         except Exception:
             logger.warning("OpenAI embeddings failed; trying local embedding service")
 

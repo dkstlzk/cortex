@@ -1,11 +1,10 @@
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict
 from collections import Counter
-from itertools import combinations
 import structlog
 
 from backend.app.retrieval.interfaces import BaseRetriever, SearchQuery
 from backend.app.retrieval.models import TraversalContext, QueryType, Chunk, RankedSeed, ScoredNode, SyntheticPassage, Edge
-from backend.app.db.queries import qdrant_search, neo4j_neighbors, pg_facts
+from backend.app.db.queries import neo4j_neighbors
 from backend.shared.neo4j_client import get_neo4j_async
 
 logger = structlog.get_logger(__name__)
@@ -15,19 +14,12 @@ class GraphRetriever(BaseRetriever):
     def name(self) -> str:
         return "graph"
 
-    async def _embedding_expand(self, query_embedding: List[float]) -> List[str]:
-        chunks = await qdrant_search(query_embedding, top_k=10)
-        doc_ids = [c["payload"].get("doc_id") for c in chunks if "doc_id" in c.get("payload", {})]
-        facts = await pg_facts(doc_ids)
-        tags = list(set([f["subject_tag"] for f in facts if "subject_tag" in f]))
-        return tags
 
     async def _type_based_expand(self, tag: str) -> List[str]:
         query = """
-        MATCH (n {tag: $tag})
-        WITH labels(n) AS lbls
-        MATCH (m)
-        WHERE any(lbl IN lbls WHERE lbl IN labels(m)) AND m.tag <> $tag
+        MATCH (n:Entity {tag: $tag})
+        MATCH (m:Entity {type: n.type})
+        WHERE m.tag <> $tag
         RETURN m.tag as tag LIMIT 10
         """
         try:
@@ -53,9 +45,7 @@ class GraphRetriever(BaseRetriever):
         for tag in ctx.implicit_tags:
             seeds[tag] = seeds.get(tag, 0.0) + 0.8
             
-        embed_tags = await self._embedding_expand(ctx.query_embedding)
-        for tag in embed_tags:
-            seeds[tag] = seeds.get(tag, 0.0) + 0.5
+
             
         if ctx.query_type == QueryType.DIAGNOSTIC and ctx.explicit_tags:
             for tag in ctx.explicit_tags:
@@ -95,17 +85,23 @@ class GraphRetriever(BaseRetriever):
         return sorted(visited.values(), key=lambda n: -n.score)
 
     async def _find_bridge_nodes(self, explicit_tags: List[str], already_found: Set[str]) -> List[ScoredNode]:
+        if not explicit_tags or len(explicit_tags) < 2:
+            return []
+            
         bridges = Counter()
         query = """
-        MATCH path = shortestPath((a {tag: $tag_a})-[*..6]-(b {tag: $tag_b}))
+        UNWIND $tags as tag_a
+        UNWIND $tags as tag_b
+        WITH tag_a, tag_b WHERE tag_a < tag_b
+        MATCH path = shortestPath((a:Entity {tag: tag_a})-[*..6]-(b:Entity {tag: tag_b}))
         RETURN [n IN nodes(path) | n.tag] AS path_tags
         """
         driver = get_neo4j_async()
         async with driver.session() as session:
-            for tag_a, tag_b in combinations(explicit_tags, 2):
-                result = await session.run(query, tag_a=tag_a, tag_b=tag_b)
-                record = await result.single()
-                if record and record["path_tags"]:
+            result = await session.run(query, tags=explicit_tags)
+            records = await result.data()
+            for record in records:
+                if record and record.get("path_tags"):
                     path_tags = record["path_tags"]
                     for tag in path_tags[1:-1]:
                         bridges[tag] += 1
@@ -127,36 +123,36 @@ class GraphRetriever(BaseRetriever):
             records = await result.data()
             return [ScoredNode(tag=rec["tag"], score=0.7, depth=2, entity_type=rec["entity_type"] or "Unknown") for rec in records]
 
-    async def _get_node_edges(self, tag: str) -> List[Edge]:
+    async def _get_bulk_node_edges(self, tags: List[str]) -> Dict[str, List[Edge]]:
+        if not tags:
+            return {}
+            
         query = """
-        MATCH (n {tag: $tag})-[r]->(m)
-        RETURN m.tag as target_tag, type(r) as rel_type, r.confidence as confidence, r.source_doc_id as source_doc_id
-        LIMIT 20
+        UNWIND $tags AS tag
+        MATCH (n:Entity {tag: tag})-[r]->(m:Entity)
+        RETURN n.tag as source_tag, m.tag as target_tag, type(r) as rel_type, r.confidence as confidence, r.fact_id as fact_id, r.source_doc_id as source_doc_id
         """
+        edges_by_node = {tag: [] for tag in tags}
         try:
             driver = get_neo4j_async()
             async with driver.session() as session:
-                result = await session.run(query, tag=tag)
+                result = await session.run(query, tags=tags)
                 records = await result.data()
-                edges = []
+                
                 for r in records:
-                    edges.append(Edge(
-                        source_tag=tag,
+                    source_tag = r["source_tag"]
+                    edges_by_node[source_tag].append(Edge(
+                        source_tag=source_tag,
                         target_tag=r["target_tag"],
                         rel_type=r["rel_type"],
-                        confidence=r.get("confidence", 1.0),
+                        confidence=r.get("confidence") or 1.0,
                         fact_id=r.get("fact_id", "unknown"),
                         source_doc_id=r.get("source_doc_id", "unknown")
                     ))
-                return edges
+                return edges_by_node
         except Exception as e:
-            logger.warning(
-                "node edges retrieval failed",
-                tag=tag,
-                exception_type=type(e).__name__,
-                exc_info=True
-            )
-            return []
+            logger.warning("bulk node edges retrieval failed", exception_type=type(e).__name__, exc_info=True)
+            return edges_by_node
 
     def _node_to_passage(self, node: ScoredNode, edges: List[Edge]) -> SyntheticPassage:
         lines = [f"{node.tag} ({node.entity_type}):"]
@@ -186,8 +182,12 @@ class GraphRetriever(BaseRetriever):
                 traversed.extend(bridges + hubs)
                 
         passages = []
-        for node in traversed[:20]:
-            edges = await self._get_node_edges(node.tag)
+        top_nodes = traversed[:20]
+        node_tags = [n.tag for n in top_nodes]
+        edges_by_node = await self._get_bulk_node_edges(node_tags)
+        
+        for node in top_nodes:
+            edges = edges_by_node.get(node.tag, [])
             passages.append(self._node_to_passage(node, edges))
             
         return passages

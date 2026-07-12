@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 
-from backend.app.db.connection import neo4j_driver
+from backend.shared.neo4j_client import neo4j_driver
 from backend.app.schemas.graph import GraphNode, GraphEdge, GraphResponse
 from backend.app.agents.shared.logging import get_logger, log_error
 

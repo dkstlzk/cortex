@@ -21,19 +21,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CORTEX Ingestion & Data Layer"
     VERSION: str = "1.0.0"
     DEBUG: bool = False
-
-    # CORS — comma-separated list of allowed browser origins, or "*" for any.
-    # e.g. "http://localhost:3000,https://cortex-frontend.example.com"
-    CORS_ALLOW_ORIGINS: str = "*"
-
-    @property
-    def cors_origins(self) -> list[str]:
-        """Parsed CORS origin allow-list."""
-        raw = (self.CORS_ALLOW_ORIGINS or "").strip()
-        if not raw or raw == "*":
-            return ["*"]
-        return [o.strip() for o in raw.split(",") if o.strip()]
-
+    
     # PostgreSQL Configuration
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
@@ -56,8 +44,8 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str | None = None
     
     # RQ Queue Configuration
-    RQ_DOC_PARSE_TIMEOUT: int = 300
-    RQ_EMBED_TIMEOUT: int = 180
+    RQ_DOC_PARSE_TIMEOUT: int = 600
+    RQ_EMBED_TIMEOUT: int = 600
     RQ_GRAPH_TIMEOUT: int = 600
     RQ_RETRY_MAX: int = 3
     RQ_RETRY_INTERVALS: str = "10,30,60"
@@ -70,6 +58,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    REDIS_URL: str | None = None
     
     # LLM Configuration (OpenAI-compatible endpoint: Fireworks, OpenAI, local, ...)
     # LLM_API_KEY is the primary credential; FAST_MODEL_API_KEY is used by the
@@ -79,8 +68,8 @@ class Settings(BaseSettings):
     LLM_BASE_URL: Optional[str] = None
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_TEMPERATURE: float = 0.3
-    LLM_MAX_TOKENS: int = 2048
-    LLM_TIMEOUT: float = 60.0
+    LLM_MAX_TOKENS: int = 4096
+    LLM_TIMEOUT: float = 300.0
     LLM_MAX_RETRIES: int = 3
 
     # Embedding Configuration
@@ -96,6 +85,7 @@ class Settings(BaseSettings):
     FAST_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
     FAST_MODEL_BASE_URL: str | None = None
     EMBEDDING_MODEL_ENDPOINT: str | None = None
+    REMOTE_PARSER_URL: str | None = None
     
     # Storage Configuration
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -122,11 +112,18 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """SQLAlchemy connection URL (psycopg 3 dialect) for the sync engine."""
+        if self.DATABASE_URL:
+            # SQLAlchemy requires the psycopg dialect explicitly
+            if self.DATABASE_URL.startswith("postgresql://"):
+                return self.DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+            return self.DATABASE_URL
         return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def postgres_dsn(self) -> str:
         """Plain libpq DSN for the async psycopg pool (no SQLAlchemy dialect)."""
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     @property

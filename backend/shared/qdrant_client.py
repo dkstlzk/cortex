@@ -22,7 +22,8 @@ def get_qdrant_async() -> AsyncQdrantClient:
     global _qdrant_client_async
     if _qdrant_client_async is None:
         _qdrant_client_async = AsyncQdrantClient(
-            url=settings.QDRANT_URL
+            url=settings.QDRANT_URL,
+            api_key=settings.QDRANT_API_KEY
         )
     return _qdrant_client_async
 

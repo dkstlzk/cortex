@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.pool import NullPool
 from collections.abc import Generator
 from psycopg_pool import AsyncConnectionPool
 import structlog
@@ -12,9 +13,7 @@ logger = structlog.get_logger(__name__)
 try:
     engine = create_engine(
         settings.database_url.replace("postgresql://", "postgresql+psycopg://", 1),
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
+        poolclass=NullPool,
     )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     logger.info("PostgreSQL engine initialized.")
@@ -32,7 +31,7 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 # --- Async Postgres (for FastAPI / P2) ---
-_async_pg_url = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+_async_pg_url = settings.postgres_dsn
 pg_pool = AsyncConnectionPool(_async_pg_url, open=False)
 
 async def init_db_pools():

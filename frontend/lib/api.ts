@@ -78,6 +78,29 @@ export async function uploadDocument(file: File): Promise<{ document_id: string;
 }
 
 // ---------------------------------------------------------------------------
+// Document ingestion status (real /status/{document_id} endpoint)
+// ---------------------------------------------------------------------------
+
+/** Mirrors the backend `DocumentStatusResponse` model exactly. */
+export interface DocumentStatus {
+  document_id: string;
+  filename: string;
+  /** UPLOADED → PARSED → EMBEDDED → COMPLETED (or FAILED). */
+  overall_status: string;
+  /** SUCCESS | FAILED | SKIPPED | null (graph extraction branch). */
+  graph_job_status: string | null;
+  error_message: string | null;
+  page_count: number | null;
+  chunk_count: number | null;
+  uploaded_at: string;
+  updated_at: string;
+}
+
+export async function getDocumentStatus(documentId: string): Promise<DocumentStatus> {
+  return apiFetch<DocumentStatus>(`/status/${encodeURIComponent(documentId)}`);
+}
+
+// ---------------------------------------------------------------------------
 // Knowledge graph (real structured /graph endpoint, backed by Neo4j)
 // ---------------------------------------------------------------------------
 

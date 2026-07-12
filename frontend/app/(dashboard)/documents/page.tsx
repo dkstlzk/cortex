@@ -1,21 +1,39 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FolderCog, CheckCircle2, CloudUpload, File, AlertCircle } from 'lucide-react';
+import { FolderCog, CheckCircle2, CloudUpload, File, AlertCircle, Loader2 } from 'lucide-react';
 import { FadeIn } from '@/components/animations/fade-in';
 import { useAuth } from '@/lib/auth-context';
 import { PageTransition } from '@/components/animations/page-transition';
-import { uploadDocument } from '@/lib/api';
+import { uploadDocument, getDocumentStatus } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+/** Ordered ingestion pipeline the backend drives a document through. */
+const STAGES = ['UPLOADED', 'PARSED', 'EMBEDDED', 'COMPLETED'] as const;
+const STAGE_LABELS: Record<string, string> = {
+  UPLOADED: 'Uploaded',
+  PARSED: 'Parsed',
+  EMBEDDED: 'Embedded',
+  COMPLETED: 'Indexed',
+  FAILED: 'Failed',
+};
+
+function stageIndex(status: string): number {
+  const i = STAGES.indexOf(status.toUpperCase() as (typeof STAGES)[number]);
+  return i === -1 ? 0 : i;
+}
 
 interface UploadedFile {
   id: string;
   name: string;
   size: number;
   status: 'uploading' | 'processing' | 'complete' | 'error';
-  progress: number;
   documentId?: string;
+  stage?: string;          // backend overall_status
+  graphStatus?: string | null;
+  pageCount?: number | null;
+  chunkCount?: number | null;
   error?: string;
 }
 
@@ -25,28 +43,64 @@ export default function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { hasPermission } = useAuth();
 
+  const mounted = useRef(true);
+  const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    const timerSet = timers.current;
+    return () => {
+      mounted.current = false;
+      timerSet.forEach(clearTimeout);
+    };
+  }, []);
+
+  const patch = useCallback((id: string, next: Partial<UploadedFile>) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...next } : f)));
+  }, []);
+
+  const pollStatus = useCallback((id: string, documentId: string, attempt = 0) => {
+    if (!mounted.current) return;
+    getDocumentStatus(documentId)
+      .then((s) => {
+        if (!mounted.current) return;
+        const overall = (s.overall_status || '').toUpperCase();
+        const terminal = overall === 'COMPLETED' || overall === 'FAILED';
+        patch(id, {
+          status: overall === 'COMPLETED' ? 'complete' : overall === 'FAILED' ? 'error' : 'processing',
+          stage: s.overall_status,
+          graphStatus: s.graph_job_status,
+          pageCount: s.page_count,
+          chunkCount: s.chunk_count,
+          error: overall === 'FAILED' ? (s.error_message || 'Ingestion failed') : undefined,
+        });
+        if (!terminal && attempt < 60) {
+          const t = setTimeout(() => pollStatus(id, documentId, attempt + 1), 3000);
+          timers.current.add(t);
+        }
+      })
+      .catch(() => {
+        // Status endpoint may 404 briefly right after upload — keep trying.
+        if (mounted.current && attempt < 60) {
+          const t = setTimeout(() => pollStatus(id, documentId, attempt + 1), 3000);
+          timers.current.add(t);
+        }
+      });
+  }, [patch]);
+
   const handleUpload = async (file: File) => {
     const id = `${file.name}-${Date.now()}`;
-    const entry: UploadedFile = { id, name: file.name, size: file.size, status: 'uploading', progress: 50 };
-    setFiles((prev) => [...prev, entry]);
+    setFiles((prev) => [...prev, { id, name: file.name, size: file.size, status: 'uploading' }]);
 
     try {
       const result = await uploadDocument(file);
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id ? { ...f, status: 'complete', progress: 100, documentId: result.document_id } : f,
-        ),
-      );
+      patch(id, { status: 'processing', documentId: result.document_id, stage: result.status || 'UPLOADED' });
+      pollStatus(id, result.document_id);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
       const isConnectionError = message.includes('Failed to fetch') || message.includes('NetworkError');
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id
-            ? { ...f, status: 'error', progress: 0, error: isConnectionError ? 'Cannot reach the CORTEX API. Is the backend running and NEXT_PUBLIC_API_URL correct?' : message }
-            : f,
-        ),
-      );
+      patch(id, {
+        status: 'error',
+        error: isConnectionError ? 'Cannot reach the CORTEX API. Check NEXT_PUBLIC_API_URL and that the backend is awake.' : message,
+      });
     }
   };
 
@@ -115,27 +169,7 @@ export default function DocumentsPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
               <p className="eyebrow">Queue</p>
               {files.map((file) => (
-                <motion.div
-                  key={file.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-3 p-3 panel rounded-md"
-                >
-                  <File className="w-4 h-4 text-faint shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-ink truncate">{file.name}</p>
-                    {file.status === 'uploading' && (
-                      <div className="mt-1.5 h-1 bg-base rounded-full overflow-hidden">
-                        <motion.div className="h-full bg-signal rounded-full" animate={{ width: `${file.progress}%` }} />
-                      </div>
-                    )}
-                    {file.status === 'error' && <p className="text-xs text-ember mt-0.5">{file.error}</p>}
-                    {file.documentId && <p className="font-mono text-[0.62rem] text-faint mt-0.5">id · {file.documentId}</p>}
-                  </div>
-                  {file.status === 'complete' && <CheckCircle2 className="w-4 h-4 text-mint shrink-0" />}
-                  {file.status === 'uploading' && <span className="data-num text-xs text-muted shrink-0">{Math.round(file.progress)}%</span>}
-                  {file.status === 'error' && <AlertCircle className="w-4 h-4 text-ember shrink-0" />}
-                </motion.div>
+                <DocumentRow key={file.id} file={file} />
               ))}
             </motion.div>
           )}
@@ -146,11 +180,87 @@ export default function DocumentsPage() {
             <div className="text-center py-12">
               <FolderCog className="w-12 h-12 mx-auto mb-3 text-line-strong" />
               <p className="text-sm text-muted">Upload documents above to start indexing.</p>
-              <p className="font-mono text-[0.62rem] text-faint mt-1 uppercase tracking-wider">parsed → chunked → embedded → graphed</p>
+              <p className="font-mono text-[0.62rem] text-faint mt-1 uppercase tracking-wider">uploaded → parsed → embedded → indexed</p>
             </div>
           </FadeIn>
         )}
       </div>
     </PageTransition>
+  );
+}
+
+function DocumentRow({ file }: { file: UploadedFile }) {
+  const isError = file.status === 'error';
+  const isComplete = file.status === 'complete';
+  const activeStep = isComplete ? STAGES.length - 1 : stageIndex(file.stage || 'UPLOADED');
+
+  const meta: string[] = [];
+  if (file.pageCount != null) meta.push(`${file.pageCount} pages`);
+  if (file.chunkCount != null) meta.push(`${file.chunkCount} chunks`);
+  if (file.graphStatus) meta.push(`graph ${file.graphStatus.toLowerCase()}`);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-3.5 panel rounded-md"
+    >
+      <div className="flex items-center gap-3">
+        <File className="w-4 h-4 text-faint shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-ink truncate">{file.name}</p>
+          {file.documentId && <p className="font-mono text-[0.6rem] text-faint mt-0.5 truncate">id · {file.documentId}</p>}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={cn(
+            'font-mono text-[0.62rem] uppercase tracking-wider',
+            isComplete ? 'text-mint' : isError ? 'text-ember' : 'text-signal',
+          )}>
+            {isError ? 'Failed' : STAGE_LABELS[(file.stage || 'UPLOADED').toUpperCase()] || file.stage || 'Uploading'}
+          </span>
+          {file.status === 'uploading' || file.status === 'processing' ? (
+            <Loader2 className="w-4 h-4 text-signal animate-spin" />
+          ) : isComplete ? (
+            <CheckCircle2 className="w-4 h-4 text-mint" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-ember" />
+          )}
+        </div>
+      </div>
+
+      {!isError && (
+        <div className="mt-3 flex items-center gap-1.5">
+          {STAGES.map((stage, i) => {
+            const done = i < activeStep || isComplete;
+            const current = i === activeStep && !isComplete;
+            return (
+              <div key={stage} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full h-1 rounded-full overflow-hidden bg-base">
+                  <motion.div
+                    className={cn('h-full rounded-full', done ? 'bg-mint' : current ? 'bg-signal' : 'bg-transparent')}
+                    initial={{ width: 0 }}
+                    animate={{ width: done ? '100%' : current ? '60%' : '0%' }}
+                    transition={{ duration: 0.6 }}
+                  >
+                    {current && <span className="block h-full animate-shimmer" />}
+                  </motion.div>
+                </div>
+                <span className={cn(
+                  'font-mono text-[0.56rem] uppercase tracking-wider',
+                  done ? 'text-mint' : current ? 'text-signal' : 'text-faint',
+                )}>
+                  {STAGE_LABELS[stage]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {meta.length > 0 && !isError && (
+        <p className="font-mono text-[0.6rem] text-muted mt-2">{meta.join('  ·  ')}</p>
+      )}
+      {isError && file.error && <p className="text-xs text-ember mt-2">{file.error}</p>}
+    </motion.div>
   );
 }

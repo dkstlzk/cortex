@@ -39,19 +39,6 @@ To answer complex questions that no single document contains.
 
 ---
 
-## Screenshots
-
-### Home & Knowledge Graph
-![Home](docs/images/home.png)
-
-### Document Upload
-![Upload](docs/images/upload.png)
-
-### AI Copilot
-![Copilot](docs/images/copilot.png)
-
----
-
 ## Features
 
 - **Layout-aware PDF parsing**

@@ -60,6 +60,7 @@ async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]
             async with AsyncOpenAI(
                 api_key=FAST_MODEL_API_KEY or "dummy",
                 base_url=EMBEDDING_MODEL_ENDPOINT,
+                default_headers={"ngrok-skip-browser-warning": "1"}
             ) as client:
                 response = await client.embeddings.create(model=settings.EMBEDDING_MODEL, input=[text])
                 return response.data[0].embedding

@@ -132,46 +132,71 @@ async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:
 def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, Any]]) -> int:
     """Write validated entities/relationships to Neo4j. Returns nodes written."""
     valid_tags: set[str] = set()
-    written = 0
+    
+    # Process and filter valid nodes
+    valid_nodes = []
+    for ent in entities:
+        tag = str(ent.get("tag") or "").strip()
+        if not tag:
+            continue
+        valid_nodes.append({
+            "tag": tag,
+            "name": str(ent.get("name") or tag),
+            "type": _norm_node_type(ent.get("type"))
+        })
+        valid_tags.add(tag)
+        
+    if not valid_nodes:
+        return 0
+
+    # Group relationships by type to prevent Cypher injection while batching
+    from collections import defaultdict
+    rels_by_type = defaultdict(list)
+    
+    for rel in relationships:
+        src = str(rel.get("source") or "").strip()
+        tgt = str(rel.get("target") or "").strip()
+        if not src or not tgt or src not in valid_tags or tgt not in valid_tags:
+            continue
+            
+        rel_type = _norm_rel_type(rel.get("type"))
+        try:
+            confidence = float(rel.get("confidence", 0.8))
+        except (TypeError, ValueError):
+            confidence = 0.8
+            
+        rels_by_type[rel_type].append({
+            "source": src,
+            "target": tgt,
+            "confidence": confidence
+        })
 
     with neo4j_driver.session() as session:
-        for ent in entities:
-            tag = str(ent.get("tag") or "").strip()
-            if not tag:
-                continue
+        # BATCH WRITE NODES
+        session.run(
+            """
+            UNWIND $nodes AS node
+            MERGE (n:Entity {tag: node.tag})
+            SET n.name = node.name, n.type = node.type, n.model_name = $model
+            """,
+            nodes=valid_nodes,
+            model=settings.LLM_MODEL
+        )
+        
+        # BATCH WRITE RELATIONSHIPS BY TYPE
+        for r_type, r_list in rels_by_type.items():
             session.run(
-                "MERGE (n:Entity {tag: $tag}) "
-                "SET n.name = $name, n.type = $type, n.model_name = $model",
-                tag=tag,
-                name=str(ent.get("name") or tag),
-                type=_norm_node_type(ent.get("type")),
-                model=settings.LLM_MODEL,
-            )
-            valid_tags.add(tag)
-            written += 1
-
-        for rel in relationships:
-            src = str(rel.get("source") or "").strip()
-            tgt = str(rel.get("target") or "").strip()
-            if not src or not tgt or src not in valid_tags or tgt not in valid_tags:
-                continue
-            rel_type = _norm_rel_type(rel.get("type"))
-            try:
-                confidence = float(rel.get("confidence", 0.8))
-            except (TypeError, ValueError):
-                confidence = 0.8
-            # rel_type is drawn from ALLOWED_REL_TYPES, so this interpolation is safe.
-            session.run(
-                f"MATCH (a:Entity {{tag: $src}}), (b:Entity {{tag: $tgt}}) "
-                f"MERGE (a)-[r:`{rel_type}`]->(b) "
-                f"SET r.confidence = $confidence, r.model_name = $model",
-                src=src,
-                tgt=tgt,
-                confidence=confidence,
-                model=settings.LLM_MODEL,
+                f"""
+                UNWIND $rels AS rel
+                MATCH (a:Entity {{tag: rel.source}}), (b:Entity {{tag: rel.target}})
+                MERGE (a)-[r:`{r_type}`]->(b)
+                SET r.confidence = rel.confidence, r.model_name = $model
+                """,
+                rels=r_list,
+                model=settings.LLM_MODEL
             )
 
-    return written
+    return len(valid_nodes)
 
 
 def process_graph_job(document_id: str) -> Dict[str, Any]:

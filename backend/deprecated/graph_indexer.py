@@ -1,5 +1,5 @@
 import structlog
-from typing import Dict, Any, List
+from typing import Dict, Any
 import os
 
 from backend.shared.neo4j_client import neo4j_driver

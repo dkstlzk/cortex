@@ -55,22 +55,6 @@ export const config = {
   maxUploadMb: Number(optionalEnv(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB, '50')),
   /** Timeout (ms) applied to non-streaming API requests. */
   requestTimeoutMs: Number(optionalEnv(process.env.NEXT_PUBLIC_REQUEST_TIMEOUT_MS, '30000')),
-  /**
-   * Optional token-issuing endpoint (an identity provider or a backend auth
-   * route) that exchanges credentials for a real, JWKS-verifiable JWT. When set,
-   * the login flow POSTs credentials here and attaches the returned token as a
-   * Bearer to every API call — the JWT the backend's `verify_jwt` expects.
-   */
-  authUrl: optionalEnv(process.env.NEXT_PUBLIC_AUTH_URL, ''),
-  /**
-   * Whether the built-in development login (unsigned, role-scoped dev tokens) is
-   * permitted. Defaults to enabled only when no real `authUrl` is configured, so
-   * production builds that point at a real IdP never expose the dev path.
-   */
-  allowDevLogin:
-    optionalEnv(process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN, '') !== ''
-      ? optionalEnv(process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN, 'false') === 'true'
-      : optionalEnv(process.env.NEXT_PUBLIC_AUTH_URL, '') === '',
 } as const;
 
 export const API_BASE = config.apiUrl;

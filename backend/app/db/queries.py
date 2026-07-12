@@ -51,32 +51,42 @@ async def pg_facts(doc_ids: List[str]) -> List[Dict[str, Any]]:
             ]
 
 async def pg_resolve_entities(text: str) -> List[str]:
-    """Find entities in text using the entity_aliases table."""
+    """Resolve entities in text by searching Neo4j for tag or name matches."""
     if not text:
         return []
+        
+    query = """
+    MATCH (n:Entity) 
+    WHERE toLower($text) CONTAINS toLower(n.tag) OR toLower($text) CONTAINS toLower(n.name) 
+    RETURN n.tag LIMIT 10
+    """
     
-    # We want to find aliases that appear in the text
-    query = "SELECT DISTINCT tag FROM entity_aliases WHERE %s ILIKE '%%' || alias_text || '%%'"
     try:
-        async with pg_pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(query, (text,))
-                rows = await cur.fetchall()
-                return [row[0] for row in rows]
-    except Exception:
-        # Fallback to naive string matching if table is empty or missing during dev
-        tags = []
-        if "P-101A" in text: tags.append("P-101A")
-        if "P-101B" in text: tags.append("P-101B")
-        return tags
+        driver = get_neo4j_async()
+        async with driver.session() as session:
+            result = await session.run(query, text=text)
+            records = await result.data()
+            return [rec["n.tag"] for rec in records if "n.tag" in rec]
+    except Exception as e:
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.warning("Entity resolution query failed", error=str(e))
+        return []
 
 async def get_redis_session_history(session_id: str, limit: int = 5) -> List[str]:
     """Fetch recent message history from Redis."""
-    from backend.shared.redis_client import get_redis
-    redis = get_redis()
+    from backend.shared.redis_client import redis_conn
+    import asyncio
     key = f"session:{session_id}:history"
     try:
-        messages = await redis.lrange(key, -limit, -1)
+        messages = await asyncio.to_thread(redis_conn.lrange, key, -limit, -1)
         return [msg.decode('utf-8') for msg in messages if msg]
     except Exception:
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.warning(
+            "Failed to fetch Redis session history",
+            session_id=session_id,
+            exc_info=True,
+        )
         return []

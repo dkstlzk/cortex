@@ -1,5 +1,11 @@
+"""
+Deprecated.
+Unused after migration to app.agents.shared.llm.
+Scheduled for removal.
+"""
+
 import os
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from openai import AsyncOpenAI
 

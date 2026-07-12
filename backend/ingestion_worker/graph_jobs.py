@@ -26,38 +26,30 @@ from backend.shared.config import settings
 from backend.shared.storage import storage_manager
 from backend.shared.neo4j_client import neo4j_driver
 from backend.app.agents.shared.llm import generate
+from backend.shared.database import SessionLocal
+from backend.shared.repositories.document_repository import DocumentRepository
+from datetime import datetime, timezone
 
 logger = structlog.get_logger(__name__)
 
-# Allow-lists constrain what the LLM can write into the graph schema, preventing
-# hallucinated labels/relationship types from polluting Neo4j.
-ALLOWED_NODE_TYPES = {
-    "equipment", "document", "procedure", "system", "component", "failure_mode",
-}
-DEFAULT_NODE_TYPE = "component"
-
-ALLOWED_REL_TYPES = {
-    "PART_OF", "CONNECTED_TO", "FEEDS", "CONTAINS", "DOCUMENTED_BY",
-    "MAINTAINED_BY", "SUSCEPTIBLE_TO", "CAUSES", "REDUNDANT_WITH",
-    "REFERENCES", "APPLIES_TO", "SUPPLIES", "RELATED_TO",
-}
+# We allow dynamic extraction of entities and relationships to support any domain.
+DEFAULT_NODE_TYPE = "entity"
 DEFAULT_REL_TYPE = "RELATED_TO"
 
 _EXTRACTION_SYSTEM_PROMPT = (
-    "You are an information-extraction engine for industrial equipment "
-    "documentation (manuals, maintenance records, P&IDs). Extract the entities "
-    "and relationships described in the text.\n\n"
+    "You are an intelligent knowledge graph extraction engine. Read the following text "
+    "and extract the key entities and the relationships between them. Adapt the entity "
+    "and relationship types to perfectly match the domain of the document (e.g., software, "
+    "medical, industrial, financial).\n\n"
     "Return STRICT JSON only, no prose, no markdown fences, with this shape:\n"
     "{\n"
-    '  "entities": [{"tag": "P-101A", "name": "Centrifugal Pump P-101A", '
-    '"type": "equipment"}],\n'
-    '  "relationships": [{"source": "P-101A", "target": "V-201", '
-    '"type": "FEEDS", "confidence": 0.9}]\n'
+    '  "entities": [{"tag": "Unique_ID_1", "name": "Readable Name", "type": "concept"}],\n'
+    '  "relationships": [{"source": "Unique_ID_1", "target": "Unique_ID_2", '
+    '"type": "DEPENDS_ON", "confidence": 0.9}]\n'
     "}\n\n"
-    f"`type` for entities MUST be one of: {sorted(ALLOWED_NODE_TYPES)}.\n"
-    f"`type` for relationships SHOULD be one of: {sorted(ALLOWED_REL_TYPES)}.\n"
-    "`tag` is a short canonical identifier (e.g. an equipment tag like 'P-101A' "
-    "or a slug). Reuse the exact same tag for an entity everywhere it appears. "
+    "`type` for entities should be a lowercase generic category (e.g., 'algorithm', 'component', 'person').\n"
+    "`type` for relationships must be UPPERCASE_WITH_UNDERSCORES (e.g., 'USES', 'PART_OF').\n"
+    "`tag` is a short canonical identifier (e.g. an acronym, a slug, or exact name). Reuse the exact same tag for an entity everywhere it appears. "
     "confidence is a float in [0,1]. If nothing is extractable, return empty lists."
 )
 
@@ -87,10 +79,22 @@ def _parse_extraction(raw: str) -> Dict[str, List[Dict[str, Any]]]:
         # Last resort: grab the outermost JSON object.
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
+            logger.warning(
+                "graph_extraction_parse_failed_no_json",
+                response_length=len(raw),
+                first_500=raw[:500],
+                last_500=raw[-500:] if len(raw) > 500 else "",
+            )
             return {"entities": [], "relationships": []}
         try:
             data = json.loads(match.group(0))
         except json.JSONDecodeError:
+            logger.warning(
+                "graph_extraction_parse_failed_decode_error",
+                response_length=len(raw),
+                first_500=raw[:500],
+                last_500=raw[-500:] if len(raw) > 500 else "",
+            )
             return {"entities": [], "relationships": []}
     return {
         "entities": data.get("entities", []) or [],
@@ -100,12 +104,12 @@ def _parse_extraction(raw: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _norm_node_type(value: Any) -> str:
     t = str(value or "").strip().lower().replace(" ", "_")
-    return t if t in ALLOWED_NODE_TYPES else DEFAULT_NODE_TYPE
+    return t if t else DEFAULT_NODE_TYPE
 
 
 def _norm_rel_type(value: Any) -> str:
     r = str(value or "").strip().upper().replace(" ", "_").replace("-", "_")
-    return r if r in ALLOWED_REL_TYPES else DEFAULT_REL_TYPE
+    return r if r else DEFAULT_REL_TYPE
 
 
 async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:
@@ -114,53 +118,90 @@ async def _extract(chunk_texts: List[str]) -> Dict[str, List[Dict[str, Any]]]:
         {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": joined},
     ]
-    raw = await generate(messages, temperature=0.0, max_tokens=settings.LLM_MAX_TOKENS)
+    logger.info("Sending prompt to LLM for graph extraction", prompt_length=len(joined))
+    raw = await generate(
+        messages, 
+        temperature=0.0, 
+        max_tokens=settings.LLM_MAX_TOKENS,
+        response_format={"type": "json_object"}
+    )
+    logger.info("Received extraction response from LLM", response_length=len(raw))
     return _parse_extraction(raw)
 
 
 def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, Any]]) -> int:
     """Write validated entities/relationships to Neo4j. Returns nodes written."""
     valid_tags: set[str] = set()
-    written = 0
+    
+    # Process and filter valid nodes
+    valid_nodes = []
+    for ent in entities:
+        tag = str(ent.get("tag") or "").strip()
+        if not tag:
+            continue
+        valid_nodes.append({
+            "tag": tag,
+            "name": str(ent.get("name") or tag),
+            "type": _norm_node_type(ent.get("type"))
+        })
+        valid_tags.add(tag)
+        
+    if not valid_nodes:
+        return 0
+
+    # Group relationships by type to prevent Cypher injection while batching
+    from collections import defaultdict
+    rels_by_type = defaultdict(list)
+    
+    for rel in relationships:
+        src = str(rel.get("source") or "").strip()
+        tgt = str(rel.get("target") or "").strip()
+        if not src or not tgt or src not in valid_tags or tgt not in valid_tags:
+            continue
+            
+        rel_type = _norm_rel_type(rel.get("type"))
+        try:
+            confidence = float(rel.get("confidence", 0.8))
+        except (TypeError, ValueError):
+            confidence = 0.8
+            
+        rels_by_type[rel_type].append({
+            "source": src,
+            "target": tgt,
+            "confidence": confidence
+        })
 
     with neo4j_driver.session() as session:
-        for ent in entities:
-            tag = str(ent.get("tag") or "").strip()
-            if not tag:
-                continue
+        # BATCH WRITE NODES (Limit memory usage on Aura Free Tier)
+        batch_size = 100
+        for i in range(0, len(valid_nodes), batch_size):
+            node_batch = valid_nodes[i:i+batch_size]
             session.run(
-                "MERGE (n:Entity {tag: $tag}) "
-                "SET n.name = $name, n.type = $type, n.model_name = $model",
-                tag=tag,
-                name=str(ent.get("name") or tag),
-                type=_norm_node_type(ent.get("type")),
-                model=settings.LLM_MODEL,
+                """
+                UNWIND $nodes AS node
+                MERGE (n:Entity {tag: node.tag})
+                SET n.name = node.name, n.type = node.type, n.model_name = $model
+                """,
+                nodes=node_batch,
+                model=settings.LLM_MODEL
             )
-            valid_tags.add(tag)
-            written += 1
+        
+        # BATCH WRITE RELATIONSHIPS BY TYPE
+        for r_type, r_list in rels_by_type.items():
+            for i in range(0, len(r_list), batch_size):
+                rel_batch = r_list[i:i+batch_size]
+                session.run(
+                    f"""
+                    UNWIND $rels AS rel
+                    MATCH (a:Entity {{tag: rel.source}}), (b:Entity {{tag: rel.target}})
+                    MERGE (a)-[r:`{r_type}`]->(b)
+                    SET r.confidence = rel.confidence, r.model_name = $model
+                    """,
+                    rels=rel_batch,
+                    model=settings.LLM_MODEL
+                )
 
-        for rel in relationships:
-            src = str(rel.get("source") or "").strip()
-            tgt = str(rel.get("target") or "").strip()
-            if not src or not tgt or src not in valid_tags or tgt not in valid_tags:
-                continue
-            rel_type = _norm_rel_type(rel.get("type"))
-            try:
-                confidence = float(rel.get("confidence", 0.8))
-            except (TypeError, ValueError):
-                confidence = 0.8
-            # rel_type is drawn from ALLOWED_REL_TYPES, so this interpolation is safe.
-            session.run(
-                f"MATCH (a:Entity {{tag: $src}}), (b:Entity {{tag: $tgt}}) "
-                f"MERGE (a)-[r:`{rel_type}`]->(b) "
-                f"SET r.confidence = $confidence, r.model_name = $model",
-                src=src,
-                tgt=tgt,
-                confidence=confidence,
-                model=settings.LLM_MODEL,
-            )
-
-    return written
+    return len(valid_nodes)
 
 
 def process_graph_job(document_id: str) -> Dict[str, Any]:
@@ -173,26 +214,50 @@ def process_graph_job(document_id: str) -> Dict[str, Any]:
     """
     if not settings.GRAPH_EXTRACTION_ENABLED:
         logger.info("graph_extraction_disabled", document_id=document_id)
+        with SessionLocal() as db:
+            repo = DocumentRepository(db)
+            repo.mark_graph_skipped(document_id)
+            repo.db.commit()
         return {"status": "skipped", "document_id": document_id}
 
     logger.info("Starting graph extraction job", document_id=document_id)
 
     try:
-        chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.json"
+        chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.jsonl"
         if not chunks_path.exists():
-            logger.warning("chunks.json missing for graph extraction", document_id=document_id)
+            logger.warning("chunks.jsonl missing for graph extraction", document_id=document_id)
+            with SessionLocal() as db:
+                repo = DocumentRepository(db)
+                repo.mark_graph_skipped(document_id)
+                repo.db.commit()
             return {"status": "skipped", "reason": "no chunks", "document_id": document_id}
 
+        texts = []
         with chunks_path.open("r", encoding="utf-8") as f:
-            chunks = json.load(f)
-
-        texts = [c["text"] for c in chunks[: settings.GRAPH_EXTRACTION_MAX_CHUNKS] if c.get("text")]
+            for line in f:
+                if not line.strip():
+                    continue
+                c = json.loads(line)
+                if c.get("text"):
+                    texts.append(c["text"])
+                if len(texts) >= settings.GRAPH_EXTRACTION_MAX_CHUNKS:
+                    break
         if not texts:
+            with SessionLocal() as db:
+                repo = DocumentRepository(db)
+                repo.mark_graph_skipped(document_id)
+                repo.db.commit()
             return {"status": "success", "nodes": 0, "document_id": document_id}
 
         _bootstrap_constraint()
         extraction = asyncio.run(_extract(texts))
         nodes_written = _write_graph(extraction["entities"], extraction["relationships"])
+
+        # Ensure we mark the graph as built to unblock convergence
+        with SessionLocal() as db:
+            repo = DocumentRepository(db)
+            repo.mark_graph_built(document_id, datetime.now(timezone.utc))
+            repo.db.commit()
 
         logger.info(
             "Graph extraction completed",
@@ -210,6 +275,14 @@ def process_graph_job(document_id: str) -> Dict[str, Any]:
         }
 
     except Exception as exc:
-        # Best-effort: a graph-extraction failure must not fail ingestion overall.
         logger.error("Graph extraction failed", document_id=document_id, error=str(exc), exc_info=True)
-        return {"status": "failed", "document_id": document_id, "error": str(exc)}
+        with SessionLocal() as db:
+            repo = DocumentRepository(db)
+            repo.mark_graph_failed(document_id)
+            repo.db.commit()
+            
+        # We MUST re-raise the exception so that RQ registers it as a failed job 
+        # and moves it to the FailedJobRegistry. This allows the DLQ Auto-Recovery 
+        # Daemon to automatically requeue it when the ML Gateway comes back online!
+        from backend.shared.exceptions import IngestionPipelineError
+        raise IngestionPipelineError(f"Graph Extraction failed: {str(exc)}", stage="Graph Extraction") from exc

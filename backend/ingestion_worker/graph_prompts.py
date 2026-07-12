@@ -1,4 +1,3 @@
-from typing import Dict, Any
 
 GRAPH_EXTRACTION_SYSTEM_PROMPT = """
 You are a specialized industrial knowledge graph extractor.

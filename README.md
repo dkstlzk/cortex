@@ -41,13 +41,14 @@ To answer complex questions that no single document contains.
 
 ## Screenshots
 
-*(Replace with actual screenshots before submission)*
+### Home & Knowledge Graph
+![Home](docs/images/home.png)
 
-| Home Page / Graph Explorer | Document Upload |
-| :---: | :---: |
-| `[Screenshot 1]` | `[Screenshot 2]` |
-| **Copilot Chat** | **System Architecture** |
-| `[Screenshot 3]` | `[Screenshot 4]` |
+### Document Upload
+![Upload](docs/images/upload.png)
+
+### AI Copilot
+![Copilot](docs/images/copilot.png)
 
 ---
 
@@ -61,7 +62,6 @@ To answer complex questions that no single document contains.
 - **Streaming Responses**
 - **Source Citations**
 - **Industrial Knowledge Graph**
-- **JWT Authentication** (JWKS-verified, end to end from frontend login to backend enforcement)
 - **Self-Healing Queue** with automatic Dead Letter Queue recovery
 - **Resumable, Idempotent Ingestion** (embedding jobs recover cleanly from partial failure)
 - **S3-Compatible Object Storage** with local-disk fallback for development
@@ -95,7 +95,7 @@ The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are co
 ```text
         Next.js (Frontend)
                ↓
-   FastAPI (API Gateway, JWT-authenticated)
+   FastAPI (API Gateway)
                ↓
     RQ Workers (Async Queue + DLQ Recovery)
                ↓
@@ -118,7 +118,7 @@ The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are co
 
 ```mermaid
 graph TD
-    A[User / Frontend] -->|Uploads PDF, JWT-authenticated| B(FastAPI Gateway)
+    A[User / Frontend] -->|Uploads PDF| B(FastAPI Gateway)
     B -->|Uploads Artifact| C[(S3 / Object Storage)]
     B -->|Enqueues Job| D[Redis / RQ]
     D -->|Pops Job| E(Ingestion Worker)
@@ -139,7 +139,7 @@ graph TD
 
 ```mermaid
 graph TD
-    A[User / Frontend] -->|Asks Question, JWT-authenticated| B(FastAPI Gateway)
+    A[User / Frontend] -->|Asks Question| B(FastAPI Gateway)
     B -->|Query| C(Multi-Agent System)
     C -->|Generate Embedding| D[FastEmbed / AMD]
     C -->|Vector Search| E[(Qdrant)]
@@ -167,7 +167,6 @@ graph TD
 | ---------- | --------------- |
 | **Frontend**   | Next.js 16      |
 | **Backend**    | FastAPI         |
-| **Auth**       | JWT / JWKS      |
 | **Vector DB**  | Qdrant          |
 | **Graph DB**   | Neo4j           |
 | **Metadata**   | PostgreSQL      |
@@ -202,7 +201,6 @@ cortex/
 - **`backend/ingestion_worker`** → Knowledge Graph Construction
 - **`backend/app/retrieval`** → Hybrid Retrieval Engine, RRF Fusion, and Reranking
 - **`backend/app/agents`** → LangGraph Multi-Agent System
-- **`backend/shared/security.py`** → JWT/JWKS Authentication
 - **`backend/fabric_api/dlq_recovery.py`** → Self-Healing Queue Recovery
 
 ---

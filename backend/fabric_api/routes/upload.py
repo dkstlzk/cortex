@@ -31,6 +31,24 @@ def upload_document(
         status=status
     )
 
+@router.post("/retry/{document_id}", response_model=UploadResponse, status_code=202)
+def retry_document(
+    document_id: str,
+    upload_service: UploadService = Depends(get_upload_service)
+):
+    """
+    Retries the ingestion process for a failed document.
+    """
+    logger.info("Retry request received", document_id=document_id)
+    
+    doc_id, job_id, status = upload_service.retry_upload(document_id)
+    
+    return UploadResponse(
+        document_id=doc_id,
+        job_id=job_id,
+        status=status
+    )
+
 @router.get("/documents", response_model=List[DocumentStatusResponse])
 def list_documents(db: Session = Depends(get_db)):
     """

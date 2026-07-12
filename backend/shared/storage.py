@@ -85,10 +85,11 @@ class StorageManager:
             for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
                 if 'Contents' in page:
                     objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents']]
-                    self.s3_client.delete_objects(
-                        Bucket=self.bucket,
-                        Delete={'Objects': objects_to_delete}
-                    )
+                    if objects_to_delete:
+                        self.s3_client.delete_objects(
+                            Bucket=self.bucket,
+                            Delete={'Objects': objects_to_delete}
+                        )
             logger.info("Document artifacts deleted from S3", document_id=str(document_id))
         except Exception as e:
             logger.error("Failed to delete document artifacts from S3", error=str(e), document_id=str(document_id))

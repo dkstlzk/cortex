@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FolderCog, CheckCircle2, CloudUpload, File, AlertCircle, Loader2 } from 'lucide-react';
+import { FolderCog, CheckCircle2, CloudUpload, File, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { FadeIn } from '@/components/animations/fade-in';
 import { useAuth } from '@/lib/auth-context';
 import { PageTransition } from '@/components/animations/page-transition';
-import { uploadDocument, getDocumentStatus, listDocuments } from '@/lib/api';
+import { uploadDocument, getDocumentStatus, listDocuments, retryDocument } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /** Ordered ingestion pipeline the backend drives a document through. */
@@ -137,6 +137,17 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleRetry = async (id: string, documentId: string) => {
+    patch(id, { status: 'processing', error: undefined, stage: 'QUEUED' });
+    try {
+      await retryDocument(documentId);
+      pollStatus(id, documentId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Retry failed';
+      patch(id, { status: 'error', error: message });
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
@@ -202,7 +213,7 @@ export default function DocumentsPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
               <p className="eyebrow">Queue</p>
               {files.map((file) => (
-                <DocumentRow key={file.id} file={file} />
+                <DocumentRow key={file.id} file={file} onRetry={handleRetry} />
               ))}
             </motion.div>
           )}
@@ -222,7 +233,7 @@ export default function DocumentsPage() {
   );
 }
 
-function DocumentRow({ file }: { file: UploadedFile }) {
+function DocumentRow({ file, onRetry }: { file: UploadedFile; onRetry: (id: string, docId: string) => void }) {
   const isError = file.status === 'error';
   const isComplete = file.status === 'complete';
   const activeStep = isComplete ? STAGES.length - 1 : stageIndex(file.stage || 'UPLOADED');
@@ -256,7 +267,18 @@ function DocumentRow({ file }: { file: UploadedFile }) {
           ) : isComplete ? (
             <CheckCircle2 className="w-4 h-4 text-mint" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-ember" />
+            <div className="flex items-center gap-1.5">
+              {file.documentId && (
+                <button
+                  onClick={() => onRetry(file.id, file.documentId!)}
+                  className="flex items-center justify-center p-1 rounded hover:bg-white/5 text-signal transition-colors group"
+                  title="Retry ingestion pipeline"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 group-active:-rotate-90 transition-transform" />
+                </button>
+              )}
+              <AlertCircle className="w-4 h-4 text-ember" />
+            </div>
           )}
         </div>
       </div>

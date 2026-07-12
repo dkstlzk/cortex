@@ -77,6 +77,19 @@ export async function uploadDocument(file: File): Promise<{ document_id: string;
   return res.json();
 }
 
+export async function retryDocument(documentId: string): Promise<{ document_id: string; job_id: string; status: string }> {
+  const res = await fetch(`${API_V1}/retry/${encodeURIComponent(documentId)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Retry failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Document ingestion status (real /status/{document_id} endpoint)
 // ---------------------------------------------------------------------------

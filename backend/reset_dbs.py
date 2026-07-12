@@ -74,10 +74,11 @@ def reset_storage():
         for page in paginator.paginate(Bucket=storage_manager.bucket):
             if 'Contents' in page:
                 objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents']]
-                storage_manager.s3_client.delete_objects(
-                    Bucket=storage_manager.bucket,
-                    Delete={'Objects': objects_to_delete}
-                )
+                if objects_to_delete:
+                    storage_manager.s3_client.delete_objects(
+                        Bucket=storage_manager.bucket,
+                        Delete={'Objects': objects_to_delete}
+                    )
         print("S3 artifact storage cleared.")
     except Exception as e:
         print(f"Failed to clear S3 storage: {e}")

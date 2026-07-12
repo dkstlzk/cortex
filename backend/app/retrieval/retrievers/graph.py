@@ -58,7 +58,7 @@ class GraphRetriever(BaseRetriever):
         return ranked[:15]
 
     async def _adaptive_traverse(
-        self, seeds: List[RankedSeed], max_depth: int = 5, relevance_threshold: float = 0.3, max_nodes: int = 50
+        self, seeds: List[RankedSeed], context: TraversalContext, max_depth: int = 5, relevance_threshold: float = 0.3, max_nodes: int = 50
     ) -> List[ScoredNode]:
         visited = {}
         frontier = [(s.tag, 0, s.score) for s in seeds]
@@ -80,7 +80,14 @@ class GraphRetriever(BaseRetriever):
             neighbors = await neo4j_neighbors(tag)
             for neighbor_tag, rel_type, confidence in neighbors:
                 if neighbor_tag not in visited:
-                    frontier.append((neighbor_tag, depth + 1, node_score * confidence))
+                    rel_multiplier = 1.0
+                    if context.target_relationship_types:
+                        if rel_type in context.target_relationship_types:
+                            rel_multiplier = 1.0
+                        else:
+                            rel_multiplier = 0.5
+                            
+                    frontier.append((neighbor_tag, depth + 1, node_score * confidence * rel_multiplier))
                     
         return sorted(visited.values(), key=lambda n: -n.score)
 
@@ -123,16 +130,21 @@ class GraphRetriever(BaseRetriever):
             records = await result.data()
             return [ScoredNode(tag=rec["tag"], score=0.7, depth=2, entity_type=rec["entity_type"] or "Unknown") for rec in records]
 
-    async def _get_bulk_node_edges(self, tags: List[str]) -> Dict[str, List[Edge]]:
+    async def _get_bulk_node_data(self, tags: List[str]) -> tuple[Dict[str, str], Dict[str, List[Edge]]]:
         if not tags:
-            return {}
+            return {}, {}
             
         query = """
         UNWIND $tags AS tag
-        MATCH (n:Entity {tag: tag})-[r]->(m:Entity)
-        RETURN n.tag as source_tag, m.tag as target_tag, type(r) as rel_type, r.confidence as confidence, r.fact_id as fact_id, r.source_doc_id as source_doc_id
+        MATCH (n:Entity {tag: tag})
+        OPTIONAL MATCH (n)-[r]->(m:Entity)
+        RETURN n.tag as source_tag, n.description as source_desc, 
+               m.tag as target_tag, m.description as target_desc, 
+               type(r) as rel_type, r.description as rel_desc, 
+               r.confidence as confidence, r.fact_id as fact_id, r.source_doc_id as source_doc_id
         """
         edges_by_node = {tag: [] for tag in tags}
+        desc_by_node = {}
         try:
             driver = get_neo4j_async()
             async with driver.session() as session:
@@ -141,26 +153,37 @@ class GraphRetriever(BaseRetriever):
                 
                 for r in records:
                     source_tag = r["source_tag"]
-                    edges_by_node[source_tag].append(Edge(
-                        source_tag=source_tag,
-                        target_tag=r["target_tag"],
-                        rel_type=r["rel_type"],
-                        confidence=r.get("confidence") or 1.0,
-                        fact_id=r.get("fact_id", "unknown"),
-                        source_doc_id=r.get("source_doc_id", "unknown")
-                    ))
-                return edges_by_node
+                    desc_by_node[source_tag] = r.get("source_desc") or ""
+                    
+                    if r.get("target_tag") and r.get("rel_type"):
+                        edges_by_node[source_tag].append(Edge(
+                            source_tag=source_tag,
+                            target_tag=r["target_tag"],
+                            rel_type=r["rel_type"],
+                            confidence=r.get("confidence") or 1.0,
+                            fact_id=r.get("fact_id", "unknown"),
+                            source_doc_id=r.get("source_doc_id", "unknown"),
+                            description=r.get("rel_desc") or ""
+                        ))
+                return desc_by_node, edges_by_node
         except Exception as e:
             logger.warning("bulk node edges retrieval failed", exception_type=type(e).__name__, exc_info=True)
-            return edges_by_node
+            return desc_by_node, edges_by_node
 
-    def _node_to_passage(self, node: ScoredNode, edges: List[Edge]) -> SyntheticPassage:
-        lines = [f"{node.tag} ({node.entity_type}):"]
-        for edge in edges:
-             lines.append(
-                 f"- {edge.rel_type} -> {edge.target_tag} "
-                 f"[confidence: {edge.confidence:.2f}, source: {edge.source_doc_id}]"
-             )
+    def _node_to_passage(self, node: ScoredNode, edges: List[Edge], description: str) -> SyntheticPassage:
+        lines = [f"[Entity] {node.tag} ({node.entity_type})"]
+        if description:
+            lines.append(f"Description: {description}")
+            
+        if edges:
+            lines.append("Relationships:")
+            for edge in edges:
+                 rel_text = f" - [{edge.rel_type}] -> {edge.target_tag}"
+                 if edge.description:
+                     rel_text += f": {edge.description}"
+                 rel_text += f" (Confidence: {edge.confidence:.2f}, Source: {edge.source_doc_id})"
+                 lines.append(rel_text)
+                 
         return SyntheticPassage(
             chunk_id=f"graph-{node.tag}", text="\n".join(lines), score=node.score,
             source="graph_traversal", fact_ids=[e.fact_id for e in edges], payload={}
@@ -172,9 +195,9 @@ class GraphRetriever(BaseRetriever):
         seeds = await self._expand_seeds(context)
         
         if depth_mode == "shallow":
-            traversed = await self._adaptive_traverse(seeds, max_depth=2, max_nodes=20)
+            traversed = await self._adaptive_traverse(seeds, context, max_depth=2, max_nodes=20)
         else:
-            traversed = await self._adaptive_traverse(seeds)
+            traversed = await self._adaptive_traverse(seeds, context)
             
             if context.query_type in (QueryType.DIAGNOSTIC, QueryType.OPEN):
                 bridges = await self._find_bridge_nodes(context.explicit_tags, {n.tag for n in traversed})
@@ -184,10 +207,11 @@ class GraphRetriever(BaseRetriever):
         passages = []
         top_nodes = traversed[:20]
         node_tags = [n.tag for n in top_nodes]
-        edges_by_node = await self._get_bulk_node_edges(node_tags)
+        desc_by_node, edges_by_node = await self._get_bulk_node_data(node_tags)
         
         for node in top_nodes:
             edges = edges_by_node.get(node.tag, [])
-            passages.append(self._node_to_passage(node, edges))
+            desc = desc_by_node.get(node.tag, "")
+            passages.append(self._node_to_passage(node, edges, desc))
             
         return passages

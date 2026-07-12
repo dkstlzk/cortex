@@ -26,6 +26,42 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL") or None
 EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT") or None
 
 
+async def _formulate_graph_strategy(query: str, history: List[str]) -> dict:
+    history_str = "\n".join(history[-3:]) if history else "None"
+    system_prompt = (
+        "You are an expert Graph Query Planner for an industrial knowledge base. "
+        "Analyze the user's query and the chat history to formulate a targeted graph search strategy.\n\n"
+        "Return STRICT JSON only, no markdown fences, with this exact schema:\n"
+        "{\n"
+        '  "search_terms": ["list", "of", "clean", "specific", "entity", "names", "or", "tags", "from", "the", "query"],\n'
+        '  "relationship_types": ["list", "of", "UPPERCASE_WITH_UNDERSCORES", "relationship", "types", "relevant", "to", "the", "query", "intent"]\n'
+        "}\n\n"
+        "Example relationship types: CONNECTED_TO, FEEDS_INTO, CONTROLS, PART_OF, DEPENDS_ON, ATTACHED_TO.\n"
+        "Extract only the physical components or critical concepts as search terms. Strip out conversational filler."
+    )
+    
+    try:
+        response = await openai_client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"History:\n{history_str}\n\nQuery: {query}"}
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=150
+        )
+        import json
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
+        return {
+            "search_terms": data.get("search_terms", []),
+            "relationship_types": data.get("relationship_types", [])
+        }
+    except Exception as e:
+        logger.warning("Graph strategy formulation failed", error=str(e))
+        return {"search_terms": [], "relationship_types": []}
+
+
 async def _classify_query_with_fallback(query: str) -> QueryType:
     query_lower = query.lower()
     if any(m in query_lower for m in ["why", "keeps failing", "root cause"]):
@@ -94,9 +130,20 @@ class ContextAssembler:
         self.embedding_service = embedding_service
 
     async def assemble(self, query: SearchQuery) -> TraversalContext:
-        explicit = await self.resolve_entities(query.text)
-
         history_texts = await self.get_recent_messages(query.session_id, limit=5)
+        
+        # 1. Formulate Pre-Traversal Strategy
+        strategy = await _formulate_graph_strategy(query.text, history_texts)
+        search_terms = strategy.get("search_terms") or [query.text]
+        target_relationship_types = strategy.get("relationship_types") or []
+        
+        # 2. Resolve Entities using clean search terms instead of raw query
+        explicit = set()
+        for term in search_terms:
+            resolved = await self.resolve_entities(term)
+            explicit.update(resolved)
+        explicit = list(explicit)
+
         history_tags = set()
         for msg in history_texts:
             history_tags.update(await self.resolve_entities(msg))
@@ -114,6 +161,7 @@ class ContextAssembler:
             implicit_tags=implicit[:5],
             query_type=final_query_type,
             query_embedding=await self._get_embedding(query.text),
+            target_relationship_types=target_relationship_types
         )
 
     async def resolve_entities(self, text: str) -> List[str]:

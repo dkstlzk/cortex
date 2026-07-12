@@ -43,13 +43,14 @@ _EXTRACTION_SYSTEM_PROMPT = (
     "medical, industrial, financial).\n\n"
     "Return STRICT JSON only, no prose, no markdown fences, with this shape:\n"
     "{\n"
-    '  "entities": [{"tag": "Unique_ID_1", "name": "Readable Name", "type": "concept"}],\n'
+    '  "entities": [{"tag": "Unique_ID_1", "name": "Readable Name", "type": "concept", "description": "A detailed summary of what this entity is, its properties, or its role."}],\n'
     '  "relationships": [{"source": "Unique_ID_1", "target": "Unique_ID_2", '
-    '"type": "DEPENDS_ON", "confidence": 0.9}]\n'
+    '"type": "DEPENDS_ON", "confidence": 0.9, "description": "A detailed explanation of why these two entities are connected and the nature of their relationship."}]\n'
     "}\n\n"
     "`type` for entities should be a lowercase generic category (e.g., 'algorithm', 'component', 'person').\n"
     "`type` for relationships must be UPPERCASE_WITH_UNDERSCORES (e.g., 'USES', 'PART_OF').\n"
     "`tag` is a short canonical identifier (e.g. an acronym, a slug, or exact name). Reuse the exact same tag for an entity everywhere it appears. "
+    "`description` MUST be highly detailed and semantic to provide rich context to downstream reasoning agents.\n"
     "confidence is a float in [0,1]. If nothing is extractable, return empty lists."
 )
 
@@ -142,7 +143,8 @@ def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, A
         valid_nodes.append({
             "tag": tag,
             "name": str(ent.get("name") or tag),
-            "type": _norm_node_type(ent.get("type"))
+            "type": _norm_node_type(ent.get("type")),
+            "description": str(ent.get("description") or "")
         })
         valid_tags.add(tag)
         
@@ -168,7 +170,8 @@ def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, A
         rels_by_type[rel_type].append({
             "source": src,
             "target": tgt,
-            "confidence": confidence
+            "confidence": confidence,
+            "description": str(rel.get("description") or "")
         })
 
     with neo4j_driver.session() as session:
@@ -180,7 +183,7 @@ def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, A
                 """
                 UNWIND $nodes AS node
                 MERGE (n:Entity {tag: node.tag})
-                SET n.name = node.name, n.type = node.type, n.model_name = $model
+                SET n.name = node.name, n.type = node.type, n.description = node.description, n.model_name = $model
                 """,
                 nodes=node_batch,
                 model=settings.LLM_MODEL
@@ -195,7 +198,7 @@ def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, A
                     UNWIND $rels AS rel
                     MATCH (a:Entity {{tag: rel.source}}), (b:Entity {{tag: rel.target}})
                     MERGE (a)-[r:`{r_type}`]->(b)
-                    SET r.confidence = rel.confidence, r.model_name = $model
+                    SET r.confidence = rel.confidence, r.description = rel.description, r.model_name = $model
                     """,
                     rels=rel_batch,
                     model=settings.LLM_MODEL

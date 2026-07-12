@@ -14,14 +14,12 @@ from typing import AsyncIterator, Dict, List, Optional
 
 from openai import AsyncOpenAI
 import openai
+import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from backend.shared.config import settings
 
 LLM_MODEL = settings.LLM_MODEL
-
-import httpx
-
 def get_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         api_key=settings.llm_api_key or "dummy",

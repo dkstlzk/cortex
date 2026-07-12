@@ -172,29 +172,34 @@ def _write_graph(entities: List[Dict[str, Any]], relationships: List[Dict[str, A
         })
 
     with neo4j_driver.session() as session:
-        # BATCH WRITE NODES
-        session.run(
-            """
-            UNWIND $nodes AS node
-            MERGE (n:Entity {tag: node.tag})
-            SET n.name = node.name, n.type = node.type, n.model_name = $model
-            """,
-            nodes=valid_nodes,
-            model=settings.LLM_MODEL
-        )
+        # BATCH WRITE NODES (Limit memory usage on Aura Free Tier)
+        batch_size = 100
+        for i in range(0, len(valid_nodes), batch_size):
+            node_batch = valid_nodes[i:i+batch_size]
+            session.run(
+                """
+                UNWIND $nodes AS node
+                MERGE (n:Entity {tag: node.tag})
+                SET n.name = node.name, n.type = node.type, n.model_name = $model
+                """,
+                nodes=node_batch,
+                model=settings.LLM_MODEL
+            )
         
         # BATCH WRITE RELATIONSHIPS BY TYPE
         for r_type, r_list in rels_by_type.items():
-            session.run(
-                f"""
-                UNWIND $rels AS rel
-                MATCH (a:Entity {{tag: rel.source}}), (b:Entity {{tag: rel.target}})
-                MERGE (a)-[r:`{r_type}`]->(b)
-                SET r.confidence = rel.confidence, r.model_name = $model
-                """,
-                rels=r_list,
-                model=settings.LLM_MODEL
-            )
+            for i in range(0, len(r_list), batch_size):
+                rel_batch = r_list[i:i+batch_size]
+                session.run(
+                    f"""
+                    UNWIND $rels AS rel
+                    MATCH (a:Entity {{tag: rel.source}}), (b:Entity {{tag: rel.target}})
+                    MERGE (a)-[r:`{r_type}`]->(b)
+                    SET r.confidence = rel.confidence, r.model_name = $model
+                    """,
+                    rels=rel_batch,
+                    model=settings.LLM_MODEL
+                )
 
     return len(valid_nodes)
 
@@ -218,19 +223,25 @@ def process_graph_job(document_id: str) -> Dict[str, Any]:
     logger.info("Starting graph extraction job", document_id=document_id)
 
     try:
-        chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.json"
+        chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.jsonl"
         if not chunks_path.exists():
-            logger.warning("chunks.json missing for graph extraction", document_id=document_id)
+            logger.warning("chunks.jsonl missing for graph extraction", document_id=document_id)
             with SessionLocal() as db:
                 repo = DocumentRepository(db)
                 repo.mark_graph_skipped(document_id)
                 repo.db.commit()
             return {"status": "skipped", "reason": "no chunks", "document_id": document_id}
 
+        texts = []
         with chunks_path.open("r", encoding="utf-8") as f:
-            chunks = json.load(f)
-
-        texts = [c["text"] for c in chunks[: settings.GRAPH_EXTRACTION_MAX_CHUNKS] if c.get("text")]
+            for line in f:
+                if not line.strip():
+                    continue
+                c = json.loads(line)
+                if c.get("text"):
+                    texts.append(c["text"])
+                if len(texts) >= settings.GRAPH_EXTRACTION_MAX_CHUNKS:
+                    break
         if not texts:
             with SessionLocal() as db:
                 repo = DocumentRepository(db)

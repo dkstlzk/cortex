@@ -25,7 +25,7 @@ async def dlq_recovery_loop():
     while True:
         try:
             # 1. Ping the external gateway
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.get(
                     f"{settings.LLM_BASE_URL}/models",
                     headers={"ngrok-skip-browser-warning": "1"}

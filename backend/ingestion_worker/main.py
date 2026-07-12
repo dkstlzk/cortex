@@ -1,7 +1,7 @@
 import signal
 import sys
 import structlog
-from rq import Worker
+from rq import SimpleWorker
 
 from backend.shared.config import settings
 from backend.shared.logging import setup_logging
@@ -55,7 +55,7 @@ def main():
 
         # Initialize and run the RQ Worker
         # We listen only to the designated ingestion queue
-        worker = Worker(
+        worker = SimpleWorker(
             [INGESTION_QUEUE_NAME],
             connection=redis_conn,
             log_job_description=False # Handled by structlog

@@ -1,127 +1,84 @@
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.11-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-Production-009688)
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![AMD](https://img.shields.io/badge/AMD-ROCm-red)
-![vLLM](https://img.shields.io/badge/vLLM-ROCm-success)
-![License](https://img.shields.io/badge/license-MIT-green)
+![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
+![AMD ROCm](https://img.shields.io/badge/AMD-ROCm-ed1c24.svg)
+![vLLM](https://img.shields.io/badge/vLLM-0.16.0-blueviolet.svg)
+![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange.svg)
+![Neo4j](https://img.shields.io/badge/Neo4j-Graph-4581c3.svg)
+![Qdrant](https://img.shields.io/badge/Qdrant-Vector-ff5252.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg)
 
 # Cortex
 
-> **Cortex is a production-grade AI Operating System for industrial documents. It transforms PDFs into a Knowledge Graph and enables engineers to query them using hybrid retrieval and multi-agent reasoning with fully cited answers.**
+> **AI Operating System for Industrial Knowledge**
+
+Turn scattered industrial documents into a searchable knowledge graph and talk to them using a multi-agent AI copilot with complete citations.
 
 🏆 **AMD Developer Hackathon 2026 – Unicorn Track**
 
-| Resource | Link |
-| --- | --- |
-| 🌐 Live Demo | [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app) |
-| 🎥 Demo Video | *(link)* |
-| 📑 Pitch Deck | *(link)* |
-| 🏗 Architecture | [docs/p3_architecture.md](docs/p3_architecture.md) |
+🌐 **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)  
+🎥 **Demo Video:** *(link)*  
+📄 **Pitch Deck:** *(link)*
 
 </div>
 
 ---
 
-## 🚨 Problem
+## 🚀 Why Cortex?
 
-Industrial organizations store thousands of engineering manuals, maintenance reports, operating procedures, and technical documents. Traditional search retrieves isolated text snippets, making multi-document reasoning difficult and slowing engineers during troubleshooting.
+Traditional RAG retrieves text.  
+**Cortex retrieves knowledge.**
 
-## 💡 Solution
+We combine:
+- **Knowledge Graphs**
+- **Hybrid Retrieval**
+- **Multi-Agent Reasoning**
 
-Cortex transforms documents into a structured Knowledge Graph, performs hybrid retrieval across vectors and graph relationships, and orchestrates multiple AI agents to generate fully cited answers.
-
----
-
-## 📸 Demo
-
-*(Add a GIF here before submission)*
-```text
-Upload PDF  ➔  Graph builds  ➔  Ask question  ➔  Answer streams  ➔  Open graph
-```
+To answer complex questions that no single document contains.
 
 ---
 
-## 🧠 Why Cortex?
+## 📸 Screenshots
 
-| Traditional RAG | Cortex |
-| --- | --- |
-| Retrieves chunks | Retrieves structured knowledge |
-| Limited context | Multi-hop reasoning |
-| Single-agent | LangGraph multi-agent |
-| Flat embeddings | Knowledge Graph + Vector DB |
-| Weak provenance | Full citations |
+*(Replace with actual screenshots before submission)*
+
+| Home Page / Graph Explorer | Document Upload |
+| :---: | :---: |
+| `[Screenshot 1]` | `[Screenshot 2]` |
+| **Copilot Chat** | **System Architecture** |
+| `[Screenshot 3]` | `[Screenshot 4]` |
 
 ---
 
 ## ✨ Features
 
-### 🤖 AI
-* **Knowledge Graph Construction**: Extracts entities and relationships via LLMs.
-* **Multi-Agent Reasoning**: Copilot, Supervisor, and Specialist Workers.
-* **Hybrid Retrieval**: Fuses Dense, Graph Traversal, and Lexical search via RRF.
-* **Streaming Generation**: Sub-second time-to-first-token.
-
-### ⚙️ Infrastructure
-* **Async RQ Workers**: Resilient background ingestion pipelines.
-* **JWT Authentication**: Secure API endpoints with remote JWKS verification.
-* **DLQ Recovery**: Auto-recovers jobs if ML inference endpoints drop.
-* **Production APIs**: Strictly typed FastAPI with structured logging.
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-graph TD
-    User([User Client]) --> Frontend[Next.js Frontend]
-    Frontend --> API[FastAPI Gateway]
-    
-    API --> RQ[RQ Workers]
-    API --> Agents[Multi-Agent System]
-    
-    RQ --> Ingest[P1: Ingestion Pipeline]
-    Agents --> Retrieve[P2: Hybrid Retrieval]
-    
-    Ingest --> DB[(Postgres, Qdrant, Neo4j)]
-    Retrieve --> DB
-    
-    Ingest --> AMD{AMD ML Gateway}
-    Retrieve --> AMD
-    
-    subgraph AMD [AMD ROCm AI Notebook]
-        Docling[IBM Docling]
-        Embed[FastEmbed]
-        vLLM[vLLM Qwen2.5]
-    end
-```
+- ✅ **Layout-aware PDF parsing**
+- ✅ **Hybrid Retrieval** (Dense + Graph + Lexical)
+- ✅ **Knowledge Graph Construction**
+- ✅ **Multi-Agent Reasoning**
+- ✅ **Streaming Responses**
+- ✅ **Source Citations**
+- ✅ **Industrial Knowledge Graph**
+- ✅ **JWT Authentication**
+- ✅ **Self-Healing Queue**
+- ✅ **Production-grade Backend**
 
 ---
 
 ## ⚡ Built on AMD
 
-Every machine learning workload in Cortex runs exclusively on AMD GPUs.
+Every ML workload runs exclusively on AMD GPUs.
 
-```text
-       AMD GPU
-          ▼
-+--------------------+
-| IBM Docling        |
-+--------------------+
-          ▼
-+--------------------+
-| FastEmbed          |
-+--------------------+
-          ▼
-+--------------------+
-| vLLM (Qwen2.5)     |
-+--------------------+
-          ▼
- OpenAI-compatible API
-          ▼
-   Cortex Backend
-```
+| Task | Technology |
+|------|------------|
+| **LLM Inference** | ROCm + vLLM |
+| **OCR / Parsing** | IBM Docling |
+| **Embeddings** | FastEmbed |
+| **GPU Platform** | AMD AI Notebooks |
+| **API Boundary** | OpenAI Compatible |
 
 **Why this matters:**
 - Zero code changes between OpenAI and AMD inference.
@@ -132,26 +89,72 @@ The AMD AI Notebook exposes a unified OpenAI-compatible inference endpoint that 
 
 ---
 
+## 🏗️ Architecture
+
+```text
+        Next.js (Frontend)
+               ↓
+      FastAPI (API Gateway)
+               ↓
+    RQ Workers (Async Queue)
+               ↓
+     Hybrid Retrieval Engine
+               ↓
+   Multi-Agent Reasoning (P3)
+               ↓
+ +--------------------------+
+ |  Qdrant | Neo4j | Postgres |
+ +--------------------------+
+               ↓
+    AMD ROCm + vLLM (Compute)
+```
+
+---
+
+## 🔄 Demo Flow
+
+**Upload PDF** ➔ **Graph Builds** ➔ **Ask Question** ➔ **Get Cited Answer** ➔ **Explore Graph**
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer      | Tech            |
+| ---------- | --------------- |
+| **Frontend**   | Next.js 16      |
+| **Backend**    | FastAPI         |
+| **Vector DB**  | Qdrant          |
+| **Graph DB**   | Neo4j           |
+| **Metadata**   | PostgreSQL      |
+| **Queue**      | Redis + RQ      |
+| **AI Compute** | AMD ROCm + vLLM |
+| **OCR**        | IBM Docling     |
+| **Embeddings** | FastEmbed       |
+
+---
+
 ## 📂 Repository Structure
+
+Judges, start here to navigate the codebase:
 
 ```text
 cortex/
 ├── backend/
-│   ├── ingestion_worker/
-│   ├── app/retrieval/
-│   ├── app/agents/
-│   └── fabric_api/
-├── frontend/
-├── scripts/
-├── notebooks/
-├── docs/
-└── docker-compose.yml
+│   ├── ingestion_worker/  # P1: Parsing, embedding, and KG extraction
+│   ├── app/retrieval/     # P2: Hybrid Retrieval (Dense, Lexical, Graph)
+│   ├── app/agents/        # P3: LangGraph Multi-Agent System
+│   └── fabric_api/        # FastAPI Application Layer
+├── frontend/              # Next.js User Interface
+├── scripts/               # Deployment and utility scripts
+├── notebooks/             # AMD AI Notebooks for vLLM deployment
+├── docs/                  # Architecture & Design Specs
+└── docker-compose.yml     # Local Infrastructure
 ```
 
-⭐ **Main implementation starts in:**
-- 📂 `backend/ingestion_worker/` (Graph Construction)
-- 📂 `backend/app/retrieval/` (Hybrid Retrieval)
-- 📂 `backend/app/agents/` (LangGraph Agents)
+### 📍 Where to Look
+- 📂 **`backend/ingestion_worker`** → Knowledge Graph Construction
+- 📂 **`backend/app/retrieval`** → Hybrid Retrieval Engine & RRF Fusion
+- 📂 **`backend/app/agents`** → LangGraph Multi-Agent System
 
 ---
 
@@ -202,62 +205,53 @@ npm run dev
 ## 🔐 Environment Variables
 
 **Backend (`backend/.env`)**
-| Variable | Description |
-| --- | --- |
-| `LLM_BASE_URL` | AMD Gateway endpoint |
-| `REMOTE_PARSER_URL` | Remote Docling endpoint |
+| Variable           | Description |
+| ------------------ | ----------- |
+| `LLM_BASE_URL`       | AMD Gateway endpoint |
+| `REMOTE_PARSER_URL`  | Remote Docling endpoint |
 | `EMBEDDING_ENDPOINT` | Remote FastEmbed endpoint |
+| `DATABASE_URL`       | PostgreSQL connection |
+| `NEO4J_URI`          | Graph database connection |
+| `ENABLE_AUTH`        | Set `true` for JWT |
 
 **Frontend (`frontend/.env`)**
-| Variable | Description |
-| --- | --- |
-| `NEXT_PUBLIC_API_URL` | Backend URL |
+| Variable            | Description |
+| ------------------- | ----------- |
+| `NEXT_PUBLIC_API_URL` | Backend URL (e.g. `http://localhost:8000`) |
 
 ---
 
-## 🛡️ Production Hardened
+## 🛡️ Security
 
-✅ **RS256 JWT**
-✅ **Row-level DB locking**
-✅ **Cypher Injection Mitigation**
-✅ **Typed APIs**
-✅ **Background Recovery**
+Cortex is built with enterprise security in mind:
+- **JWT Authentication** (RS256, Remote JWKS)
+- **Cypher Injection Protection** (Strict Regex sanitization)
+- **Parameterized SQL**
+- **Row-level locking** for concurrency
+- **Background job retries** via RQ
+- **DLQ recovery daemons**
+- **Strongly Typed APIs** (Pydantic)
 
 ---
 
 ## 🌍 Production Deployment
 
-| Layer | Platform |
-| --- | --- |
+| Service | Hosted On |
+|---------|-----------|
 | **Frontend** | Vercel |
-| **Backend** | Render |
-| **GPU** | AMD AI Notebook |
-| **Graph** | AuraDB |
-| **Vector** | Qdrant Cloud |
-| **Metadata** | Neon |
+| **Backend API** | Render |
+| **ML Gateway** | AMD AI Notebooks |
+| **Vector DB** | Qdrant Cloud |
+| **Graph DB** | Neo4j AuraDB |
+| **Relational DB** | Neon Postgres |
 
 ---
 
-## 📊 Performance
+## 🔮 Roadmap
 
-✓ **<2s document ingestion** (small PDFs)
-✓ **Streaming answers**
-✓ **Graph extraction**
-✓ **Hybrid retrieval**
-✓ **Production async pipeline**
-✓ **Fully cited responses**
-
----
-
-## 🔮 Future Roadmap
-
-- [ ] Kafka Integration
+- [ ] Kafka Integration for high-throughput ingestion
 - [ ] Comprehensive Observability (Prometheus + OpenTelemetry)
 - [ ] Fine-grained Server-side RBAC
+- [ ] P&ID Vision (Piping and Instrumentation Diagrams)
 - [ ] Industrial Vision-Language Models (VLM)
-
----
-
-## License
-
-MIT
+- [ ] Advanced Graph Analytics

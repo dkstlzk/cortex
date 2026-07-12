@@ -66,13 +66,21 @@ def reset_qdrant():
     print("Qdrant collection created.")
 
 def reset_storage():
-    print("Resetting local artifact storage...")
-    import shutil
-    upload_dir = settings.UPLOAD_DIR
-    if upload_dir.exists():
-        shutil.rmtree(upload_dir)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    print("Local artifact storage cleared.")
+    print("Resetting remote S3 artifact storage...")
+    try:
+        from backend.shared.storage import storage_manager
+        
+        paginator = storage_manager.s3_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=storage_manager.bucket):
+            if 'Contents' in page:
+                objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents']]
+                storage_manager.s3_client.delete_objects(
+                    Bucket=storage_manager.bucket,
+                    Delete={'Objects': objects_to_delete}
+                )
+        print("S3 artifact storage cleared.")
+    except Exception as e:
+        print(f"Failed to clear S3 storage: {e}")
 
 def _guard() -> None:
     """Refuse to run destructively unless the caller has clearly opted in.
@@ -94,13 +102,22 @@ def _guard() -> None:
     args = parser.parse_args()
 
     target = settings.postgres_dsn
+    
+    from urllib.parse import urlparse
+    parsed = urlparse(target)
+    safe_target = f"{parsed.hostname}{':' + str(parsed.port) if parsed.port else ''}{parsed.path}"
+    
     print("!!! DESTRUCTIVE OPERATION !!!")
     print("This will PERMANENTLY delete ALL data in:")
-    print(f"  Postgres : {settings.POSTGRES_SERVER}/{settings.POSTGRES_DB}")
+    print(f"  Postgres : {safe_target}")
     print(f"  Neo4j    : {settings.NEO4J_URI}")
-    print(f"  Qdrant   : {settings.QDRANT_COLLECTION}")
-    print(f"  Redis    : {settings.REDIS_HOST}:{settings.REDIS_PORT}")
-    print(f"  Storage  : {settings.UPLOAD_DIR}")
+    print(f"  Qdrant   : {settings.QDRANT_URL}/{settings.QDRANT_COLLECTION}")
+    
+    redis_parsed = urlparse(settings.redis_url)
+    safe_redis = f"{redis_parsed.hostname}{':' + str(redis_parsed.port) if redis_parsed.port else ''}"
+    print(f"  Redis    : {safe_redis}")
+    
+    print(f"  Storage  : s3://{settings.S3_BUCKET_NAME}")
 
     # Heuristic production guard: refuse outright on obviously non-local targets
     # unless explicitly forced AND confirmed.
@@ -115,9 +132,9 @@ def _guard() -> None:
         print("Re-run with --force, or set CORTEX_RESET_CONFIRM=YES, to proceed.")
         sys.exit(1)
 
-    # Even when forced, a remote-looking target requires a typed confirmation
-    # (unless stdin is not a TTY, e.g. CI, where --force is treated as sufficient).
-    if looks_remote and sys.stdin.isatty():
+    # If the user explicitly passed CORTEX_RESET_CONFIRM=YES, completely bypass the prompt.
+    # Otherwise, even with --force, a remote target on a TTY requires typed confirmation.
+    if looks_remote and sys.stdin.isatty() and os.getenv("CORTEX_RESET_CONFIRM") != "YES":
         answer = input('\nType "RESET" to confirm destruction of the target above: ').strip()
         if answer != "RESET":
             print("Confirmation not received. Aborting.")

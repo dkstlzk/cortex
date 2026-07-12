@@ -79,11 +79,19 @@ class ParsingService:
         Raises:
             IngestionPipelineError: If parsing fails.
         """
+        is_temp_file = False
+        original_file_path = file_path
+        
+        if file_path.startswith("s3://"):
+            from backend.shared.storage import storage_manager
+            file_path = storage_manager.download_to_tempfile(file_path)
+            is_temp_file = True
+            
         path = Path(file_path)
         if not path.exists():
             raise IngestionPipelineError(f"File not found: {file_path}", stage="Docling Initial Load")
             
-        logger.info("Starting Docling extraction", file_path=file_path)
+        logger.info("Starting Docling extraction", file_path=original_file_path, local_path=str(path))
         
         try:
             from backend.shared.config import settings
@@ -127,7 +135,7 @@ class ParsingService:
                 # at the module level and instantly OOM the 512MB Render instance.
                 docling_document = None
                 
-                logger.info("Remote Docling extraction completed", file_path=file_path, page_count=page_count, has_chunks=bool(chunks))
+                logger.info("Remote Docling extraction completed", file_path=original_file_path, page_count=page_count, has_chunks=bool(chunks))
             else:
                 logger.info("Using local Docling parser")
                 converter = self._get_converter()
@@ -149,7 +157,7 @@ class ParsingService:
                 }
                 
                 docling_document = result.document
-                logger.info("Local Docling extraction completed", file_path=file_path, page_count=page_count)
+                logger.info("Local Docling extraction completed", file_path=original_file_path, page_count=page_count)
                 chunks = None
                 
             return ParsedDocument(
@@ -163,12 +171,17 @@ class ParsingService:
         except Exception as e:
             logger.error(
                 "Docling parsing failed", 
-                file_path=file_path, 
+                file_path=original_file_path, 
                 exception_type=type(e).__name__, 
                 error=str(e),
                 exc_info=True
             )
             raise IngestionPipelineError(message=str(e), stage="Docling Conversion")
+        finally:
+            if is_temp_file and path.exists():
+                import os
+                os.remove(path)
+                logger.info("Deleted temporary download file", temp_path=str(path))
 
 def get_parsing_service() -> ParsingService:
     """Dependency provider for ParsingService."""

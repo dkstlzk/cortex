@@ -115,6 +115,12 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     
+    S3_ENDPOINT_URL: str | None = None
+    S3_ACCESS_KEY_ID: str | None = None
+    S3_SECRET_ACCESS_KEY: str | None = None
+    S3_REGION: str = "auto"
+    S3_BUCKET_NAME: str = "cortex-artifacts"
+    
     # LLM Configuration
     LLM_SUPPORTS_JSON_MODE: bool = True
     

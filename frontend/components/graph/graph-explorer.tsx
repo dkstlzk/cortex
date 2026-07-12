@@ -188,25 +188,32 @@ export function GraphExplorer() {
     cyRef.current = cy;
 
     const nodes = cy.nodes();
-    const centerNode = cy.getElementById(graphData.center);
+    const centerNode = cy.getElementById(graphData.center || '');
+    const centerPos = centerNode.position() || { x: 0, y: 0 };
     const sortedNodes = nodes.sort((a, b) => {
-      const distA = a.position().x !== undefined ? Math.sqrt((a.position().x - (centerNode.position().x || 0)) ** 2 + (a.position().y - (centerNode.position().y || 0)) ** 2) : 0;
-      const distB = b.position().x !== undefined ? Math.sqrt((b.position().x - (centerNode.position().x || 0)) ** 2 + (b.position().y - (centerNode.position().y || 0)) ** 2) : 0;
+      const posA = a.position();
+      const posB = b.position();
+      const distA = posA ? Math.sqrt((posA.x - centerPos.x) ** 2 + (posA.y - centerPos.y) ** 2) : 0;
+      const distB = posB ? Math.sqrt((posB.x - centerPos.x) ** 2 + (posB.y - centerPos.y) ** 2) : 0;
       return distA - distB;
     });
 
+    const timeouts: NodeJS.Timeout[] = [];
     sortedNodes.forEach((node, i) => {
-      setTimeout(() => {
-        node.addClass('revealed');
-        const connectedEdges = node.connectedEdges();
-        connectedEdges.forEach((edge) => {
-          const src = edge.source();
-          const tgt = edge.target();
-          if (src.hasClass('revealed') && tgt.hasClass('revealed')) {
-            edge.addClass('revealed');
-          }
-        });
-      }, i * 60);
+      timeouts.push(
+        setTimeout(() => {
+          if (cy.destroyed()) return;
+          node.addClass('revealed');
+          const connectedEdges = node.connectedEdges();
+          connectedEdges.forEach((edge) => {
+            const src = edge.source();
+            const tgt = edge.target();
+            if (src.hasClass('revealed') && tgt.hasClass('revealed')) {
+              edge.addClass('revealed');
+            }
+          });
+        }, i * 60)
+      );
     });
 
     cy.on('tap', 'node', (evt: EventObject) => {
@@ -246,6 +253,7 @@ export function GraphExplorer() {
     });
 
     return () => {
+      timeouts.forEach(clearTimeout);
       cy.destroy();
       cyRef.current = null;
     };

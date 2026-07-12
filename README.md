@@ -20,8 +20,6 @@ Turn scattered industrial documents into a searchable knowledge graph and talk t
 **AMD Developer Hackathon 2026 – Unicorn Track**
 
 **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)
-**Demo Video:** *(link)*
-**Pitch Deck:** *(link)*
 
 </div>
 

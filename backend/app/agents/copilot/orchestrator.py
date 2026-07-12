@@ -54,7 +54,22 @@ async def run_query(
             focused_tag=focused_tag,
         )
 
-        context_texts = [chunk.text for chunk in retrieval_ctx.chunks]
+        context_texts = []
+        for chunk in retrieval_ctx.chunks:
+            filename = chunk.payload.get("filename", "Unknown")
+            page_numbers = chunk.payload.get("page_numbers", [])
+            headings = chunk.payload.get("headings", [])
+            chunk_idx = chunk.payload.get("chunk_index")
+            
+            header = f"Source: {filename}\n"
+            if page_numbers:
+                header += f"Page: {page_numbers[0]}\n"
+            if headings:
+                header += f"Section: {headings[-1]}\n"
+            if chunk_idx is not None:
+                header += f"Chunk: {chunk_idx}\n"
+            
+            context_texts.append(f"{header}\n{chunk.text}")
 
         # --- Step 2: LLM Generation — stream tokens immediately ---
         messages = build_copilot_messages(query, context_texts)
@@ -70,7 +85,11 @@ async def run_query(
         for citation in retrieval_ctx.citations:
             yield emit_citation(
                 doc_id=citation.doc_id,
+                filename=citation.filename,
                 passage_id=citation.passage_id,
+                chunk_index=citation.chunk_index,
+                page_numbers=citation.page_numbers,
+                headings=citation.headings,
                 page=citation.page,
             )
 

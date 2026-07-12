@@ -61,7 +61,11 @@ export interface CopilotMessage {
 
 export interface Citation {
   doc_id: string;
+  filename: string;
   passage_id: string;
+  chunk_index: number;
+  page_numbers: number[];
+  headings: string[];
   page: number;
   title?: string;
   snippet?: string;
@@ -97,7 +101,11 @@ export interface TokenEvent {
 
 export interface CitationEvent {
   doc_id: string;
+  filename: string;
   passage_id: string;
+  chunk_index: number;
+  page_numbers: number[];
+  headings: string[];
   page: number;
 }
 

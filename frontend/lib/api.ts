@@ -139,7 +139,7 @@ export async function fetchGraph(tag: string, depth: number = config.defaultGrap
 
 export interface SSECallbacks {
   onToken: (text: string) => void;
-  onCitation: (citation: { doc_id: string; passage_id: string; page: number | null }) => void;
+  onCitation: (citation: { doc_id: string; filename: string; passage_id: string; chunk_index: number; page_numbers: number[]; headings: string[]; page: number | null }) => void;
   onAgentTrigger: (trigger: { worker: string; job_id: string }) => void;
   onReasoning: (content: string) => void;
   onToolCall: (toolName: string, toolArgs: Record<string, unknown>) => void;

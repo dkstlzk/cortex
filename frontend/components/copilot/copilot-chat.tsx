@@ -65,7 +65,7 @@ export function CopilotChat({ entityTag = null }: CopilotChatProps) {
         );
       },
       onCitation: (cit) => {
-        citations.push({ ...cit, page: cit.page ?? 0, title: `Document ${cit.doc_id}`, snippet: '' });
+        citations.push({ ...cit, page: cit.page ?? 0, title: cit.filename, snippet: '' });
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, citations: [...citations] } : m,

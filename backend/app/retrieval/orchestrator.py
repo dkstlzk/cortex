@@ -53,9 +53,22 @@ async def retrieve(
     pipeline = get_retrieval_pipeline()
     result = await pipeline.run(search_query)
     
+    from backend.app.retrieval.models import Citation
+
     # Bridging the new RetrievalResult to the older RetrievalContext structure used by callers
     return RetrievalContext(
         chunks=result.chunks,
+        citations=[
+            Citation(
+                doc_id=chunk.payload.get("document_id", "unknown"),
+                filename=chunk.payload.get("filename", "unknown"),
+                passage_id=chunk.chunk_id,
+                chunk_index=chunk.payload.get("chunk_index", 0),
+                page_numbers=chunk.payload.get("page_numbers", []),
+                headings=chunk.payload.get("headings", [])
+            )
+            for chunk in result.chunks
+        ],
         metadata={
             "query_type": result.diagnostics.get("query_type"),
             "timings": result.timings,

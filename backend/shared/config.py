@@ -126,12 +126,14 @@ class Settings(BaseSettings):
     
     # Retrieval Configuration
     RRF_K: int = 60
-    # Lexical (Postgres FTS) pathway. Fully implemented in retrievers/keyword.py;
-    # enabled here so fusion runs as the intended three-pathway system. Falls back
-    # gracefully (empty result) if the `chunks.fts` column is absent.
-    RETRIEVAL_ENABLE_KEYWORD: bool = True
-    # Number of fused chunks handed to the generator.
-    RETRIEVAL_TOP_K: int = 8
+    # Lexical (Postgres FTS) pathway. Disabled: the backing PostgreSQL `chunks`
+    # table was removed during the S3 migration.  Re-enable once a real lexical
+    # backend is wired up.
+    RETRIEVAL_ENABLE_KEYWORD: bool = False
+    # Number of fused chunks handed to the generator.  Temporarily raised from
+    # 8 → 20 to compensate for the disabled keyword pathway.  Reduce to 10-12
+    # after heading-aware embeddings are deployed.
+    RETRIEVAL_TOP_K: int = 20
 
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE), case_sensitive=True, extra="ignore")
 

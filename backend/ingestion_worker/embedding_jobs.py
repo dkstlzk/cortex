@@ -3,6 +3,7 @@ import json
 import time
 from typing import Any
 from pathlib import Path
+import os
 from datetime import datetime, timezone
 
 from backend.shared.database import SessionLocal
@@ -40,15 +41,17 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
         repo.db.commit()
         
         try:
-            # 2. Read chunks.jsonl iteratively from S3/Storage
+            # 2. Read chunks.jsonl iteratively from Storage
             artifact_uri = storage_manager.get_artifact_uri(document_id, "chunks.jsonl")
             try:
                 temp_chunks_path = storage_manager.download_to_tempfile(artifact_uri)
             except Exception as e:
-                raise IngestionPipelineError(f"chunks.jsonl artifact not found or failed to download: {e}", stage="Embedding")
-                
+                raise IngestionPipelineError(
+                    f"chunks.jsonl artifact not found or failed to download: {e}",
+                    stage="Embedding",
+                )
+
             chunks_path = Path(temp_chunks_path)
-                
             # 3. Resume / Idempotency Check
             existing_chunk_ids = qdrant_service.get_existing_chunk_ids(document_id)
             if existing_chunk_ids:
@@ -80,9 +83,20 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
                     # Populate chunk filename if not present
                     if "filename" not in c:
                         c["filename"] = doc.filename
+
+                    # Prepend section headings to anchor the paragraph in its
+                    # document context.  Without this, orphaned body text like
+                    # "This standard is issued under the fixed designation
+                    # A106/A106M..." loses its semantic link to "ASTM A106".
+                    headings = c.get("headings", [])
+                    if headings:
+                        heading_prefix = "Section: " + " > ".join(headings)
+                        text_to_embed = f"{heading_prefix}\n\n{c['text']}"
+                    else:
+                        text_to_embed = c["text"]
                         
                     batch_chunks.append(c)
-                    batch_texts.append(c["text"])
+                    batch_texts.append(text_to_embed)
                     
                     # Generate Embeddings and Upsert in Batches
                     if len(batch_chunks) >= batch_size:
@@ -137,7 +151,6 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
             
             logger.info("Embedding and Indexing completed successfully", document_id=document_id, time_ms=time_ms, count=total_chunks)
             if chunks_path.exists():
-                import os
                 os.remove(chunks_path)
                 
             return {

@@ -30,10 +30,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from pathlib import Path
 import re
 import uuid
 from collections import defaultdict
-from pathlib import Path
+
 from typing import Any, Dict, List, Tuple
 
 import structlog
@@ -395,18 +397,21 @@ def _load_chunk_texts(document_id: str) -> List[str]:
         
     cap = settings.GRAPH_EXTRACTION_MAX_CHUNKS
     texts: List[str] = []
-    with chunks_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            c = json.loads(line)
-            if c.get("text"):
-                texts.append(c["text"])
-            if cap and cap > 0 and len(texts) >= cap:
-                break
-                
-    import os
-    os.remove(temp_chunks_path)
+    
+    try:
+        with chunks_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                c = json.loads(line)
+                if c.get("text"):
+                    texts.append(c["text"])
+                if cap and cap > 0 and len(texts) >= cap:
+                    break
+    finally:
+        if chunks_path.exists():
+            os.remove(chunks_path)
+            
     return texts
 
 

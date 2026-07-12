@@ -315,7 +315,7 @@ export function GraphExplorer() {
       <div className="absolute top-4 left-4 z-10 flex items-center gap-2 pointer-events-none">
         <span className="w-1.5 h-1.5 rounded-full bg-signal animate-signal" />
         <span className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-[#a89a82]">
-          knowledge graph · {centeredNode || config.defaultEntityTag}
+          knowledge graph · {centeredNode || config.defaultEntityTag || 'random'}
         </span>
       </div>
 
@@ -340,7 +340,7 @@ export function GraphExplorer() {
         <div className="absolute inset-0 flex items-center justify-center z-20 p-4">
           <div className="hud rounded-lg p-6 max-w-md text-center">
             <p className="text-sm hud-text mb-4">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => loadGraph(config.defaultEntityTag, depth)}>
+            <Button variant="outline" size="sm" onClick={() => loadGraph(config.defaultEntityTag || '', depth)}>
               <RotateCcw className="w-3.5 h-3.5" /> Retry
             </Button>
           </div>
@@ -366,7 +366,7 @@ export function GraphExplorer() {
         ))}
       </div>
 
-      <GraphControls depth={depth} onDepthChange={setDepth} />
+      <GraphControls depth={depth} onDepthChange={setDepth} onSearch={(tag) => loadGraph(tag, depth)} />
 
       <AnimatePresence>
         {tooltip && (

@@ -13,16 +13,26 @@ import { cn } from '@/lib/utils';
 const STAGES = ['UPLOADED', 'PARSED', 'EMBEDDED', 'GRAPH_BUILT', 'COMPLETED'] as const;
 const STAGE_LABELS: Record<string, string> = {
   UPLOADED: 'Uploaded',
+  QUEUED: 'Queued',
+  PROCESSING: 'Parsing',
   PARSED: 'Parsed',
+  EMBEDDING: 'Embedding',
+  INDEXING: 'Indexing',
   EMBEDDED: 'Embedded',
+  GRAPH_BUILDING: 'Extracting Graph',
   GRAPH_BUILT: 'Graph Built',
   COMPLETED: 'Indexed',
   FAILED: 'Failed',
 };
 
 function stageIndex(status: string): number {
-  const i = STAGES.indexOf(status.toUpperCase() as (typeof STAGES)[number]);
-  return i === -1 ? 0 : i;
+  const s = status.toUpperCase();
+  if (['UPLOADED', 'QUEUED'].includes(s)) return 0;
+  if (['PROCESSING'].includes(s)) return 1;
+  if (['PARSED', 'EMBEDDING', 'INDEXING'].includes(s)) return 2;
+  if (['EMBEDDED', 'GRAPH_BUILDING'].includes(s)) return 3;
+  if (['GRAPH_BUILT', 'COMPLETED'].includes(s)) return 4;
+  return 0;
 }
 
 interface UploadedFile {

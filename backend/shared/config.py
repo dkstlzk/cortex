@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # size and each window is extracted independently, then merged/canonicalized.
     GRAPH_EXTRACTION_WINDOW: int = 12
     # Max extraction windows run concurrently (bounds memory + gateway pressure).
-    GRAPH_EXTRACTION_CONCURRENCY: int = 3
+    GRAPH_EXTRACTION_CONCURRENCY: int = 1
 
     # Knowledge-graph traversal (P2 retrieval). Previously hardcoded magic
     # numbers inside GraphRetriever; surfaced here so they are tunable and

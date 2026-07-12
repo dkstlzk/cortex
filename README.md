@@ -17,17 +17,17 @@
 
 Turn scattered industrial documents into a searchable knowledge graph and talk to them using a multi-agent AI copilot with complete citations.
 
-🏆 **AMD Developer Hackathon 2026 – Unicorn Track**
+ **AMD Developer Hackathon 2026 – Unicorn Track**
 
-🌐 **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)  
-🎥 **Demo Video:** *(link)*  
-📄 **Pitch Deck:** *(link)*
+ **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)  
+ **Demo Video:** *(link)*  
+ **Pitch Deck:** *(link)*
 
 </div>
 
 ---
 
-## 🚀 Why Cortex?
+##  Why Cortex?
 
 Traditional RAG retrieves text.  
 **Cortex retrieves knowledge.**
@@ -41,7 +41,7 @@ To answer complex questions that no single document contains.
 
 ---
 
-## 📸 Screenshots
+##  Screenshots
 
 *(Replace with actual screenshots before submission)*
 
@@ -53,7 +53,7 @@ To answer complex questions that no single document contains.
 
 ---
 
-## ✨ Features
+##  Features
 
 - ✅ **Layout-aware PDF parsing**
 - ✅ **Hybrid Retrieval** (Dense + Graph + Lexical)
@@ -68,7 +68,7 @@ To answer complex questions that no single document contains.
 
 ---
 
-## ⚡ Built on AMD
+##  Built on AMD
 
 Embedding, chunking, parsing, generation, retrieval - all AI-related components were offloaded to AMD GPU notebooks and were accessed through ngrok tunnels.
 
@@ -89,7 +89,7 @@ The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are co
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```text
         Next.js (Frontend)
@@ -111,7 +111,7 @@ The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are co
 
 ---
 
-## 📊 Data Flow Diagrams
+##  Data Flow Diagrams
 
 ### 1. File Upload to Graph Generation (Ingestion)
 
@@ -151,7 +151,7 @@ graph TD
 
 ---
 
-## 🔄 Demo Flow
+##  Demo Flow
 
 **Upload PDF** ➔ **Graph Builds** ➔ **Ask Question** ➔ **Get Cited Answer** ➔ **Explore Graph**
 
@@ -173,7 +173,7 @@ graph TD
 
 ---
 
-## 📂 Repository Structure
+##  Repository Structure
 
 Judges, start here to navigate the codebase:
 
@@ -191,10 +191,10 @@ cortex/
 └── docker-compose.yml     # Local Infrastructure
 ```
 
-### 📍 Where to Look
-- 📂 **`backend/ingestion_worker`** → Knowledge Graph Construction
-- 📂 **`backend/app/retrieval`** → Hybrid Retrieval Engine & RRF Fusion
-- 📂 **`backend/app/agents`** → LangGraph Multi-Agent System
+###  Where to Look
+-  **`backend/ingestion_worker`** → Knowledge Graph Construction
+-  **`backend/app/retrieval`** → Hybrid Retrieval Engine & RRF Fusion
+-  **`backend/app/agents`** → LangGraph Multi-Agent System
 
 ---
 
@@ -242,52 +242,66 @@ npm run dev
 
 ---
 
-## 🔐 Environment Variables
+##  Environment Variables
 
 **Backend (`backend/.env`)**
-| Variable           | Description |
-| ------------------ | ----------- |
-| `LLM_BASE_URL`       | AMD Gateway endpoint |
-| `REMOTE_PARSER_URL`  | Remote Docling endpoint |
-| `EMBEDDING_ENDPOINT` | Remote FastEmbed endpoint |
-| `DATABASE_URL`       | PostgreSQL connection |
-| `NEO4J_URI`          | Graph database connection |
-| `ENABLE_AUTH`        | Set `true` for JWT |
+| Variable | Description |
+|----------|-------------|
+| `CORS_ORIGINS` | Comma-separated list of allowed frontend origins for CORS |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `DEBUG` | Enable debug mode (`true`/`false`) |
+| `EMBEDDING_MODEL` | Embedding model name |
+| `EMBEDDING_MODEL_ENDPOINT` | Embedding model API endpoint | (AMD AI Notebook tunneled via ngrok)
+| `FAST_MODEL` | Lightweight LLM used for fast responses |
+| `FAST_MODEL_API_KEY` | API key for the fast LLM |
+| `FAST_MODEL_BASE_URL` | Base URL of the fast LLM provider | (AMD AI Notebook tunneled via ngrok)
+| `LLM_API_KEY` | API key for the primary LLM |
+| `LLM_BASE_URL` | Base URL of the primary LLM provider | (AMD AI Notebook tunneled via ngrok)
+| `LLM_MODEL` | Primary LLM model name | 
+| `NEO4J_PASSWORD` | Neo4j database password |
+| `NEO4J_URI` | Graph database connection URI |
+| `NEO4J_USER` | Neo4j database username |
+| `PROJECT_NAME` | Application name |
+| `QDRANT_API_KEY` | Qdrant Cloud API key (optional for local instances) |
+| `QDRANT_COLLECTION` | Qdrant collection name |
+| `QDRANT_URL` | Qdrant server URL |
+| `REDIS_URL` | Redis connection URL |
+| `REMOTE_PARSER_URL` | Remote Docling parser endpoint | (AMD AI Notebook tunneled via ngrok)
+| `S3_ACCESS_KEY_ID` | S3-compatible storage access key |
+| `S3_BUCKET_NAME` | S3 bucket name |
+| `S3_ENDPOINT_URL` | S3-compatible storage endpoint |
+| `S3_REGION` | S3 bucket region |
+| `S3_SECRET_ACCESS_KEY` | S3-compatible storage secret key |
 
 **Frontend (`frontend/.env`)**
-| Variable            | Description |
-| ------------------- | ----------- |
-| `NEXT_PUBLIC_API_URL` | Backend URL (e.g. `http://localhost:8000`) |
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Base URL of the backend API |
+| `NEXT_PUBLIC_API_PREFIX` | Versioned API path prefix |
+| `NEXT_PUBLIC_APP_NAME` | Application name displayed in the UI |
+| `NEXT_PUBLIC_DEFAULT_ENTITY` | Default entity shown in the knowledge graph |
+| `NEXT_PUBLIC_DEFAULT_GRAPH_DEPTH` | Default graph traversal depth (number of hops) |
+| `NEXT_PUBLIC_MAX_UPLOAD_MB` | Maximum file upload size (MB) |
+| `NEXT_PUBLIC_REQUEST_TIMEOUT_MS` | Timeout for non-streaming API requests (ms) |
 
 ---
 
-## 🛡️ Security
-
-Cortex is built with enterprise security in mind:
-- **JWT Authentication** (RS256, Remote JWKS)
-- **Cypher Injection Protection** (Strict Regex sanitization)
-- **Parameterized SQL**
-- **Row-level locking** for concurrency
-- **Background job retries** via RQ
-- **DLQ recovery daemons**
-- **Strongly Typed APIs** (Pydantic)
-
----
-
-## 🌍 Production Deployment
+##  Production Deployment
 
 | Service | Hosted On |
 |---------|-----------|
 | **Frontend** | Vercel |
 | **Backend API** | Render |
-| **ML Gateway** | AMD AI Notebooks |
+| **ML Gateway (Inclunding parsing and embedding)** | AMD AI Notebooks |
 | **Vector DB** | Qdrant Cloud |
 | **Graph DB** | Neo4j AuraDB |
 | **Relational DB** | Neon Postgres |
+| **Cache** | Redis |
+| **Object Storage** | Supabase S3-Compatible Storage |
 
 ---
 
-## 🔮 Roadmap
+##  Roadmap
 
 - [ ] Kafka Integration for high-throughput ingestion
 - [ ] Comprehensive Observability (Prometheus + OpenTelemetry)

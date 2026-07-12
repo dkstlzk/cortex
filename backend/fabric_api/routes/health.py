@@ -30,6 +30,7 @@ class ReadinessServices(BaseModel):
     neo4j: str | None = None
     qdrant: str | None = None
     redis: str | None = None
+    ml_gateway: str | None = None
 
 class ReadinessResponse(BaseModel):
     ready: bool
@@ -102,6 +103,22 @@ async def readiness_probe(
         services.redis = "error"
         ready = False
         logger.error("Redis readiness check failed", error=str(e))
+
+    # Check ML Gateway (Offloaded Jobs)
+    if settings.LLM_BASE_URL:
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(
+                    f"{settings.LLM_BASE_URL}/models",
+                    headers={"ngrok-skip-browser-warning": "1"}
+                )
+                resp.raise_for_status()
+                services.ml_gateway = "ok"
+        except Exception as e:
+            services.ml_gateway = "error"
+            ready = False
+            logger.error("ML Gateway readiness check failed", error=str(e))
 
     if not ready:
         response.status_code = 503

@@ -40,10 +40,14 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
         repo.db.commit()
         
         try:
-            # 2. Read chunks.jsonl iteratively
-            chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.jsonl"
-            if not chunks_path.exists():
-                raise IngestionPipelineError("chunks.jsonl artifact not found", stage="Embedding")
+            # 2. Read chunks.jsonl iteratively from S3/Storage
+            artifact_uri = storage_manager.get_artifact_uri(document_id, "chunks.jsonl")
+            try:
+                temp_chunks_path = storage_manager.download_to_tempfile(artifact_uri)
+            except Exception as e:
+                raise IngestionPipelineError(f"chunks.jsonl artifact not found or failed to download: {e}", stage="Embedding")
+                
+            chunks_path = Path(temp_chunks_path)
                 
             # 3. Resume / Idempotency Check
             existing_chunk_ids = qdrant_service.get_existing_chunk_ids(document_id)
@@ -132,6 +136,10 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
             repo.db.commit()
             
             logger.info("Embedding and Indexing completed successfully", document_id=document_id, time_ms=time_ms, count=total_chunks)
+            if chunks_path.exists():
+                import os
+                os.remove(chunks_path)
+                
             return {
                 "status": "success",
                 "document_id": document_id,

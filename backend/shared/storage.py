@@ -46,6 +46,12 @@ class StorageManager:
     def get_object_key(self, document_id: uuid.UUID | str, filename: str) -> str:
         """Returns the S3 object key for an artifact."""
         return f"{document_id}/{filename}"
+        
+    def get_artifact_uri(self, document_id: uuid.UUID | str, filename: str) -> str:
+        """Returns the URI (S3 or local path) for an artifact."""
+        if self.use_local:
+            return str(self.upload_dir / str(document_id) / filename)
+        return f"s3://{self.bucket}/{self.get_object_key(document_id, filename)}"
 
     def save_and_hash_file(self, file: UploadFile, document_id: uuid.UUID) -> tuple[str, str]:
         """

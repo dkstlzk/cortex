@@ -382,9 +382,17 @@ def _write_graph(
 
 def _load_chunk_texts(document_id: str) -> List[str]:
     """Read chunk texts from the document's NDJSON artifact, honoring an optional cap."""
-    chunks_path = Path(storage_manager.get_document_dir(document_id)) / "chunks.jsonl"
+    artifact_uri = storage_manager.get_artifact_uri(document_id, "chunks.jsonl")
+    try:
+        temp_chunks_path = storage_manager.download_to_tempfile(artifact_uri)
+    except Exception as e:
+        logger.error("Failed to download chunks.jsonl for graph extraction", error=str(e))
+        return []
+        
+    chunks_path = Path(temp_chunks_path)
     if not chunks_path.exists():
         return []
+        
     cap = settings.GRAPH_EXTRACTION_MAX_CHUNKS
     texts: List[str] = []
     with chunks_path.open("r", encoding="utf-8") as f:
@@ -396,6 +404,9 @@ def _load_chunk_texts(document_id: str) -> List[str]:
                 texts.append(c["text"])
             if cap and cap > 0 and len(texts) >= cap:
                 break
+                
+    import os
+    os.remove(temp_chunks_path)
     return texts
 
 

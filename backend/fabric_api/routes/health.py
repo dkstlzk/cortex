@@ -125,17 +125,22 @@ async def readiness_probe(
     # fully-healthy instance (Postgres/Neo4j/Qdrant/Redis all up), directly
     # undercutting that recovery mechanism.
     if settings.LLM_BASE_URL:
-        try:
-            client = get_health_http_client()
-            resp = await client.get(
-                f"{settings.LLM_BASE_URL}/models",
-                headers={"ngrok-skip-browser-warning": "1"}
-            )
-            resp.raise_for_status()
+        # Only ping the gateway if it looks like a personal/local tunnel (ngrok/localhost).
+        # If it's a commercial API (Groq, OpenAI), assume it's highly available to save rate limits.
+        if "ngrok" in settings.LLM_BASE_URL.lower() or "localhost" in settings.LLM_BASE_URL.lower() or "127.0.0.1" in settings.LLM_BASE_URL:
+            try:
+                client = get_health_http_client()
+                resp = await client.get(
+                    f"{settings.LLM_BASE_URL}/models",
+                    headers={"ngrok-skip-browser-warning": "1"}
+                )
+                resp.raise_for_status()
+                services.ml_gateway = "ok"
+            except Exception as e:
+                services.ml_gateway = "degraded"
+                logger.warning("ML Gateway unreachable (informational, not gating readiness)", error=str(e))
+        else:
             services.ml_gateway = "ok"
-        except Exception as e:
-            services.ml_gateway = "degraded"
-            logger.warning("ML Gateway unreachable (informational, not gating readiness)", error=str(e))
 
     if not ready:
         response.status_code = 503

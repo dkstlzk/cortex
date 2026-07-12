@@ -24,10 +24,15 @@ def create_app() -> FastAPI:
 
     # Register Middleware
     app.add_middleware(StructlogRequestMiddleware)
+    # CORS is env-driven via CORS_ALLOW_ORIGINS (comma-separated, or "*").
+    # The API authenticates with bearer tokens (Authorization header), not
+    # cookies, so credentials are not required — which lets a wildcard origin
+    # stay spec-valid (ACA-Origin: "*" is illegal alongside credentials).
+    cors_origins = settings.cors_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"], # In production, restrict this
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

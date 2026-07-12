@@ -21,7 +21,19 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CORTEX Ingestion & Data Layer"
     VERSION: str = "1.0.0"
     DEBUG: bool = False
-    
+
+    # CORS — comma-separated list of allowed browser origins, or "*" for any.
+    # e.g. "http://localhost:3000,https://cortex-frontend.example.com"
+    CORS_ALLOW_ORIGINS: str = "*"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS origin allow-list."""
+        raw = (self.CORS_ALLOW_ORIGINS or "").strip()
+        if not raw or raw == "*":
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
+
     # PostgreSQL Configuration
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"

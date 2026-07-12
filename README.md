@@ -1,83 +1,183 @@
-# Cortex: Industrial RAG Platform
+<div align="center">
 
-**Cortex** is a production-grade retrieval-augmented generation (RAG) system designed for complex industrial document intelligence. It ingests technical documents, constructs a rich Knowledge Graph, and exposes a multi-agent reasoning layer that answers natural language queries with full provenance and citation support.
+![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
+![AMD ROCm](https://img.shields.io/badge/AMD-ROCm-ed1c24.svg)
+![vLLM](https://img.shields.io/badge/vLLM-0.16.0-blueviolet.svg)
+![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange.svg)
+![Neo4j](https://img.shields.io/badge/Neo4j-Graph-4581c3.svg)
+![Qdrant](https://img.shields.io/badge/Qdrant-Vector-ff5252.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg)
 
-**Live Frontend Demo**: [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)
+# Cortex
 
----
+> **AI Operating System for Industrial Knowledge**
 
-## 🚀 AMD Compute Usage & ML Architecture
+Turn scattered industrial documents into a searchable knowledge graph and talk to them using a multi-agent AI copilot with complete citations.
 
-Cortex was designed specifically to leverage high-performance GPU compute. All heavy machine learning workloads are entirely offloaded to the **AMD AI Notebooks** platform running on **ROCm 7.2**.
+🏆 **AMD Developer Hackathon 2026 – Unicorn Track**
 
-Our `cortex_unified_notebook.ipynb` (AMD Hackathon Edition) runs a Unified ML Gateway that exposes:
-1. **vLLM (ROCm-optimized)**: Serving `Qwen/Qwen2.5-7B-Instruct` for all generative tasks, agent reasoning, and graph extraction.
-2. **IBM Docling**: Performing heavy layout-aware parsing, OCR, and table structure recognition on PDFs.
-3. **FastEmbed**: Generating `BAAI/bge-base-en-v1.5` embeddings (768-dim) for dense vector retrieval.
+🌐 **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)  
+🎥 **Demo Video:** *(link)*  
+📄 **Pitch Deck:** *(link)*
 
-This single AMD GPU node exposes these services via an Ngrok tunnel (`https://entree-antiquely-rotting.ngrok-free.dev`), allowing our lightweight backend to securely communicate with the powerhouse ML models.
-
----
-
-## 🛠️ Main Code Paths & Implementation Details
-
-Our repository is designed for easy review. Here are the core implementation paths:
-
-- **Knowledge Graph Ingestion Pipeline**: `backend/ingestion_worker/`
-  - Explains how we use Docling and LLMs to extract entities/relationships from PDFs into Neo4j.
-- **Hybrid Retrieval Pipeline (P2)**: `backend/app/retrieval/`
-  - Explains our 3-way retrieval (Dense, Lexical, Graph Traversal) fused using Reciprocal Rank Fusion (RRF).
-- **Multi-Agent Reasoning Layer (P3)**: `backend/app/agents/`
-  - Explains our LangGraph-based Copilot, Supervisor, and specialized Workers (Asset, Diagnose, Comply).
+</div>
 
 ---
 
-## 🏗️ Architecture & External Services
+## 🚀 Why Cortex?
 
-Cortex uses a modern, scalable microservices architecture:
+Traditional RAG retrieves text.  
+**Cortex retrieves knowledge.**
 
-| Component        | Technology & External Service                                   |
-| ---------------- | --------------------------------------------------------------- |
-| **Frontend**     | Next.js 16, React 19, Tailwind CSS 4 (Deployed on **Vercel**)     |
-| **Backend API**  | FastAPI (Async, Python 3.11+)                                   |
-| **Metadata DB**  | PostgreSQL (Neon DB) - Stores document metadata and status      |
-| **Vector Store** | Qdrant Cloud - Stores dense chunk embeddings                    |
-| **Graph Store**  | Neo4j AuraDB - Stores the LLM-extracted Knowledge Graph         |
-| **Task Queue**   | Redis (Upstash) & Python RQ - Handles asynchronous ingestion    |
-| **ML Gateway**   | AMD AI Notebooks (ROCm + vLLM + Docling + FastEmbed)            |
+We combine:
+- **Knowledge Graphs**
+- **Hybrid Retrieval**
+- **Multi-Agent Reasoning**
+
+To answer complex questions that no single document contains.
 
 ---
 
-## 💻 Setup Instructions (Running Locally)
+## 📸 Screenshots
 
-To run the full project locally, follow these steps:
+*(Replace with actual screenshots before submission)*
 
-### 1. Start External Infrastructure (Docker)
-We use Docker Compose to spin up local instances of our databases.
+| Home Page / Graph Explorer | Document Upload |
+| :---: | :---: |
+| `[Screenshot 1]` | `[Screenshot 2]` |
+| **Copilot Chat** | **System Architecture** |
+| `[Screenshot 3]` | `[Screenshot 4]` |
+
+---
+
+## ✨ Features
+
+- ✅ **Layout-aware PDF parsing**
+- ✅ **Hybrid Retrieval** (Dense + Graph + Lexical)
+- ✅ **Knowledge Graph Construction**
+- ✅ **Multi-Agent Reasoning**
+- ✅ **Streaming Responses**
+- ✅ **Source Citations**
+- ✅ **Industrial Knowledge Graph**
+- ✅ **JWT Authentication**
+- ✅ **Self-Healing Queue**
+- ✅ **Production-grade Backend**
+
+---
+
+## ⚡ Built on AMD
+
+Every ML workload runs exclusively on AMD GPUs.
+
+| Task | Technology |
+|------|------------|
+| **LLM Inference** | ROCm + vLLM |
+| **OCR / Parsing** | IBM Docling |
+| **Embeddings** | FastEmbed |
+| **GPU Platform** | AMD AI Notebooks |
+| **API Boundary** | OpenAI Compatible |
+
+**Why this matters:**
+- Zero code changes between OpenAI and AMD inference.
+- Entire ML stack runs locally on AMD GPUs.
+- Ready for secure, on-premise enterprise deployments.
+
+The AMD AI Notebook exposes a unified OpenAI-compatible inference endpoint that is consumed natively by the Cortex backend.
+
+---
+
+## 🏗️ Architecture
+
+```text
+        Next.js (Frontend)
+               ↓
+      FastAPI (API Gateway)
+               ↓
+    RQ Workers (Async Queue)
+               ↓
+     Hybrid Retrieval Engine
+               ↓
+   Multi-Agent Reasoning (P3)
+               ↓
+ +--------------------------+
+ |  Qdrant | Neo4j | Postgres |
+ +--------------------------+
+               ↓
+    AMD ROCm + vLLM (Compute)
+```
+
+---
+
+## 🔄 Demo Flow
+
+**Upload PDF** ➔ **Graph Builds** ➔ **Ask Question** ➔ **Get Cited Answer** ➔ **Explore Graph**
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer      | Tech            |
+| ---------- | --------------- |
+| **Frontend**   | Next.js 16      |
+| **Backend**    | FastAPI         |
+| **Vector DB**  | Qdrant          |
+| **Graph DB**   | Neo4j           |
+| **Metadata**   | PostgreSQL      |
+| **Queue**      | Redis + RQ      |
+| **AI Compute** | AMD ROCm + vLLM |
+| **OCR**        | IBM Docling     |
+| **Embeddings** | FastEmbed       |
+
+---
+
+## 📂 Repository Structure
+
+Judges, start here to navigate the codebase:
+
+```text
+cortex/
+├── backend/
+│   ├── ingestion_worker/  # P1: Parsing, embedding, and KG extraction
+│   ├── app/retrieval/     # P2: Hybrid Retrieval (Dense, Lexical, Graph)
+│   ├── app/agents/        # P3: LangGraph Multi-Agent System
+│   └── fabric_api/        # FastAPI Application Layer
+├── frontend/              # Next.js User Interface
+├── scripts/               # Deployment and utility scripts
+├── notebooks/             # AMD AI Notebooks for vLLM deployment
+├── docs/                  # Architecture & Design Specs
+└── docker-compose.yml     # Local Infrastructure
+```
+
+### 📍 Where to Look
+- 📂 **`backend/ingestion_worker`** → Knowledge Graph Construction
+- 📂 **`backend/app/retrieval`** → Hybrid Retrieval Engine & RRF Fusion
+- 📂 **`backend/app/agents`** → LangGraph Multi-Agent System
+
+---
+
+## 💻 Setup Instructions
+
+### Prerequisites
+- Python 3.11+
+- Node.js 20+
+- Docker & Docker Compose
+- AMD AI Notebook
+
+### 1. AMD Notebook Setup
+Upload `cortex_unified_notebook.ipynb` to the AMD AI Notebooks platform. Run the cells to expose the unified ML gateway endpoints via Ngrok. 
+
+### 2. Infrastructure (Docker)
 ```bash
 docker compose up -d
 ```
-*(This provisions local PostgreSQL, Redis, Qdrant, and Neo4j)*
-
-### 2. Launch the AMD ML Gateway
-1. Upload `cortex_unified_notebook.ipynb` to the AMD AI Notebooks platform.
-2. Add your Ngrok auth token in the notebook configuration block.
-3. Run all cells to start vLLM, FastEmbed, and Docling.
-4. Copy the generated Ngrok public URL (e.g., `https://your-url.ngrok-free.dev`).
 
 ### 3. Backend Setup
 ```bash
 cd backend
 cp .env.example .env
-```
-Update the `.env` file with your ML Gateway URL:
-```env
-REMOTE_PARSER_URL=https://your-url.ngrok-free.dev/parse
-EMBEDDING_MODEL_ENDPOINT=https://your-url.ngrok-free.dev/v1
-LLM_BASE_URL=https://your-url.ngrok-free.dev/v1
-```
-Install dependencies and run the server:
-```bash
 uv venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -85,8 +185,8 @@ alembic upgrade head
 uv run uvicorn backend.fabric_api.main:app --reload --port 8000
 ```
 
-### 4. Run the Ingestion Worker
-In a separate terminal (with the backend `.venv` activated):
+### 4. Ingestion Worker
+*(In a separate terminal)*
 ```bash
 cd backend
 uv run python -m backend.ingestion_worker.main
@@ -99,13 +199,59 @@ cp .env.example .env
 npm install
 npm run dev
 ```
-The frontend will be available at `http://localhost:3000`.
 
 ---
 
-## 🔒 Original Work & Security Posture
-- **Zero-Trust Defaults**: We employ robust Cypher injection mitigation by sanitizing all LLM-derived node and relationship labels via regex `[a-z0-9_]`.
-- **Resilient Workers**: Custom DLQ Auto-Recovery daemons that poll the AMD ML Gateway for liveliness before requeuing failed ingestion jobs.
+## 🔐 Environment Variables
 
-## License
-MIT License. See [LICENSE](LICENSE) for details.
+**Backend (`backend/.env`)**
+| Variable           | Description |
+| ------------------ | ----------- |
+| `LLM_BASE_URL`       | AMD Gateway endpoint |
+| `REMOTE_PARSER_URL`  | Remote Docling endpoint |
+| `EMBEDDING_ENDPOINT` | Remote FastEmbed endpoint |
+| `DATABASE_URL`       | PostgreSQL connection |
+| `NEO4J_URI`          | Graph database connection |
+| `ENABLE_AUTH`        | Set `true` for JWT |
+
+**Frontend (`frontend/.env`)**
+| Variable            | Description |
+| ------------------- | ----------- |
+| `NEXT_PUBLIC_API_URL` | Backend URL (e.g. `http://localhost:8000`) |
+
+---
+
+## 🛡️ Security
+
+Cortex is built with enterprise security in mind:
+- **JWT Authentication** (RS256, Remote JWKS)
+- **Cypher Injection Protection** (Strict Regex sanitization)
+- **Parameterized SQL**
+- **Row-level locking** for concurrency
+- **Background job retries** via RQ
+- **DLQ recovery daemons**
+- **Strongly Typed APIs** (Pydantic)
+
+---
+
+## 🌍 Production Deployment
+
+| Service | Hosted On |
+|---------|-----------|
+| **Frontend** | Vercel |
+| **Backend API** | Render |
+| **ML Gateway** | AMD AI Notebooks |
+| **Vector DB** | Qdrant Cloud |
+| **Graph DB** | Neo4j AuraDB |
+| **Relational DB** | Neon Postgres |
+
+---
+
+## 🔮 Roadmap
+
+- [ ] Kafka Integration for high-throughput ingestion
+- [ ] Comprehensive Observability (Prometheus + OpenTelemetry)
+- [ ] Fine-grained Server-side RBAC
+- [ ] P&ID Vision (Piping and Instrumentation Diagrams)
+- [ ] Industrial Vision-Language Models (VLM)
+- [ ] Advanced Graph Analytics

@@ -70,7 +70,7 @@ To answer complex questions that no single document contains.
 
 ## ⚡ Built on AMD
 
-Every ML workload runs exclusively on AMD GPUs.
+Embedding, chunking, parsing, generation, retrieval - all AI-related components were offloaded to AMD GPU notebooks and were accessed through ngrok tunnels.
 
 | Task | Technology |
 |------|------------|
@@ -82,10 +82,10 @@ Every ML workload runs exclusively on AMD GPUs.
 
 **Why this matters:**
 - Zero code changes between OpenAI and AMD inference.
-- Entire ML stack runs locally on AMD GPUs.
+- Complete offloading of heavy ML components to dedicated AMD hardware.
 - Ready for secure, on-premise enterprise deployments.
 
-The AMD AI Notebook exposes a unified OpenAI-compatible inference endpoint that is consumed natively by the Cortex backend.
+The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are consumed natively by the Cortex backend.
 
 ---
 
@@ -107,6 +107,46 @@ The AMD AI Notebook exposes a unified OpenAI-compatible inference endpoint that 
  +--------------------------+
                ↓
     AMD ROCm + vLLM (Compute)
+```
+
+---
+
+## 📊 Data Flow Diagrams
+
+### 1. File Upload to Graph Generation (Ingestion)
+
+```mermaid
+graph TD
+    A[User / Frontend] -->|Uploads PDF| B(FastAPI Gateway)
+    B -->|Saves to Disk| C[(File Storage)]
+    B -->|Enqueues Job| D[Redis / RQ]
+    D -->|Pops Job| E(Ingestion Worker)
+    E -->|1. Parse Document| F[IBM Docling / AMD]
+    F -->|Parsed Content| E
+    E -->|2. Generate Embeddings| G[FastEmbed / AMD]
+    G -->|Embeddings| E
+    E -->|3. Extract Entities| H[vLLM / AMD]
+    H -->|Graph Data| E
+    E -->|Store Nodes/Edges| I[(Neo4j)]
+    E -->|Store Embeddings| J[(Qdrant)]
+    E -->|Update Metadata| K[(PostgreSQL)]
+```
+
+### 2. Query Retrieval Pipeline
+
+```mermaid
+graph TD
+    A[User / Frontend] -->|Asks Question| B(FastAPI Gateway)
+    B -->|Query| C(Multi-Agent System)
+    C -->|Generate Embedding| D[FastEmbed / AMD]
+    C -->|Vector Search| E[(Qdrant)]
+    C -->|Graph Traversal| F[(Neo4j)]
+    E -->|Vector Results| G(Hybrid Retrieval Engine)
+    F -->|Graph Results| G
+    G -->|RRF Fusion & Context| H[Combined Context]
+    H -->|Prompt w/ Context| I[vLLM / AMD]
+    I -->|Streaming Response| C
+    C -->|Streams Answer & Citations| A
 ```
 
 ---

@@ -1,6 +1,5 @@
 import structlog
 from typing import List
-from openai import OpenAI
 
 from backend.shared.services.embedding_service.provider import EmbeddingProvider
 from backend.shared.exceptions import InfrastructureError

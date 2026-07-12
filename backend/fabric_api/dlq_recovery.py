@@ -1,11 +1,10 @@
 import asyncio
 import httpx
 import structlog
-from rq import Queue
 from rq.registry import FailedJobRegistry
 
 from backend.shared.config import settings
-from backend.shared.redis_client import redis_conn, ingestion_queue
+from backend.shared.redis_client import ingestion_queue
 
 logger = structlog.get_logger(__name__)
 

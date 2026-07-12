@@ -40,7 +40,7 @@ def get_document_status(
     sub-job statuses for parsing, embedding, and graph extraction.
     """
     repo = DocumentRepository(db)
-    doc = repo.get_document(str(document_id))
+    doc = repo.get_by_id(str(document_id))
     
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

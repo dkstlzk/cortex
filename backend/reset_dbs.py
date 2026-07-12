@@ -11,7 +11,7 @@ from backend.shared.redis_client import redis_conn
 from backend.shared.neo4j_client import neo4j_driver
 from backend.shared.qdrant_client import qdrant_client
 from qdrant_client.http.models import Distance, VectorParams
-from backend.shared.models.document import Document
+from backend.shared.models.document import Document  # noqa: F401
 
 
 def reset_postgres():

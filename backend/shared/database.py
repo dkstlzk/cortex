@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.pool import NullPool
 from collections.abc import Generator
 from psycopg_pool import AsyncConnectionPool
 import structlog
@@ -7,8 +8,6 @@ import structlog
 from backend.shared.config import settings
 
 logger = structlog.get_logger(__name__)
-
-from sqlalchemy.pool import NullPool
 
 # --- Sync Postgres (for RQ) ---
 try:

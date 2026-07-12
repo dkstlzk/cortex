@@ -4,7 +4,6 @@ from backend.app.retrieval.models import TraversalContext, QueryType
 from backend.app.retrieval.interfaces import SearchQuery
 from backend.app.db.queries import pg_resolve_entities, get_redis_session_history
 from backend.shared.config import settings
-import os
 import structlog
 import httpx
 
@@ -19,11 +18,6 @@ openai_client = AsyncOpenAI(
     default_headers={"ngrok-skip-browser-warning": "1"},
     **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
 )
-
-FAST_MODEL_API_KEY = os.getenv("FAST_MODEL_API_KEY", "")
-FAST_MODEL_BASE_URL = os.getenv("FAST_MODEL_BASE_URL") or None
-LLM_BASE_URL = os.getenv("LLM_BASE_URL") or None
-EMBEDDING_MODEL_ENDPOINT = os.getenv("EMBEDDING_MODEL_ENDPOINT") or None
 
 
 async def _formulate_graph_strategy(query: str, history: List[str]) -> dict:
@@ -93,11 +87,12 @@ async def _classify_query_with_fallback(query: str) -> QueryType:
 
 
 async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]:
-    if EMBEDDING_MODEL_ENDPOINT:
+    fast_model_api_key = settings.fast_model_api_key
+    if settings.EMBEDDING_MODEL_ENDPOINT:
         try:
             async with AsyncOpenAI(
-                api_key=FAST_MODEL_API_KEY or "dummy",
-                base_url=EMBEDDING_MODEL_ENDPOINT,
+                api_key=fast_model_api_key or "dummy",
+                base_url=settings.EMBEDDING_MODEL_ENDPOINT,
                 timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0),
                 default_headers={"ngrok-skip-browser-warning": "1"}
             ) as client:
@@ -106,9 +101,9 @@ async def _embed_with_fallback(text: str, embedding_service=None) -> List[float]
         except Exception:
             logger.warning("Custom embedding endpoint failed; trying fallback")
 
-    if FAST_MODEL_API_KEY and FAST_MODEL_API_KEY != "<replace_with_your_api_key>":
+    if fast_model_api_key and fast_model_api_key != "<replace_with_your_api_key>":
         try:
-            async with AsyncOpenAI(api_key=FAST_MODEL_API_KEY, timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0)) as client:
+            async with AsyncOpenAI(api_key=fast_model_api_key, timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0)) as client:
                 response = await client.embeddings.create(model="text-embedding-3-small", input=[text])
                 return response.data[0].embedding
         except Exception:

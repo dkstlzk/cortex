@@ -104,7 +104,16 @@ async def readiness_probe(
         ready = False
         logger.error("Redis readiness check failed", error=str(e))
 
-    # Check ML Gateway (Offloaded Jobs)
+    # Check ML Gateway (offloaded parsing/embedding/LLM jobs).
+    #
+    # This is reported *informationally only* and deliberately does NOT flip
+    # overall readiness. The gateway is an optional accelerator (a personal
+    # GPU notebook over an ngrok tunnel); its downtime is routine and is
+    # already handled as recoverable by the DLQ auto-recovery daemon, which
+    # requeues jobs once the gateway returns. Failing /ready on gateway
+    # downtime would let an orchestrator de-register or restart an otherwise
+    # fully-healthy instance (Postgres/Neo4j/Qdrant/Redis all up), directly
+    # undercutting that recovery mechanism.
     if settings.LLM_BASE_URL:
         import httpx
         try:
@@ -116,9 +125,8 @@ async def readiness_probe(
                 resp.raise_for_status()
                 services.ml_gateway = "ok"
         except Exception as e:
-            services.ml_gateway = "error"
-            ready = False
-            logger.error("ML Gateway readiness check failed", error=str(e))
+            services.ml_gateway = "degraded"
+            logger.warning("ML Gateway unreachable (informational, not gating readiness)", error=str(e))
 
     if not ready:
         response.status_code = 503

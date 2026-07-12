@@ -11,6 +11,7 @@ from backend.shared.redis_client import redis_conn
 from backend.shared.neo4j_client import neo4j_driver
 from backend.shared.qdrant_client import qdrant_client
 from qdrant_client.http.models import Distance, VectorParams
+from rq import Queue
 from backend.shared.models.document import Document  # noqa: F401
 
 
@@ -22,7 +23,6 @@ def reset_postgres():
     Base.metadata.create_all(bind=engine)
     print("Recreated PostgreSQL tables.")
 
-from rq import Queue
 
 def reset_redis():
     print("Flushing Redis and clearing queues...")
@@ -74,7 +74,58 @@ def reset_storage():
     upload_dir.mkdir(parents=True, exist_ok=True)
     print("Local artifact storage cleared.")
 
+def _guard() -> None:
+    """Refuse to run destructively unless the caller has clearly opted in.
+
+    This script drops all Postgres tables, deletes every Neo4j node, deletes the
+    Qdrant collection, flushes Redis, and wipes local artifact storage. That is
+    unrecoverable against a shared or production-adjacent database. Require an
+    explicit opt-in (``--force`` / ``CORTEX_RESET_CONFIRM=YES``) and, when the
+    target looks production-like, an interactive typed confirmation.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Destructively reset all CORTEX datastores.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Proceed without the interactive confirmation prompt.",
+    )
+    args = parser.parse_args()
+
+    target = settings.postgres_dsn
+    print("!!! DESTRUCTIVE OPERATION !!!")
+    print("This will PERMANENTLY delete ALL data in:")
+    print(f"  Postgres : {settings.POSTGRES_SERVER}/{settings.POSTGRES_DB}")
+    print(f"  Neo4j    : {settings.NEO4J_URI}")
+    print(f"  Qdrant   : {settings.QDRANT_COLLECTION}")
+    print(f"  Redis    : {settings.REDIS_HOST}:{settings.REDIS_PORT}")
+    print(f"  Storage  : {settings.UPLOAD_DIR}")
+
+    # Heuristic production guard: refuse outright on obviously non-local targets
+    # unless explicitly forced AND confirmed.
+    lowered = target.lower()
+    looks_remote = not any(h in lowered for h in ("localhost", "127.0.0.1", "::1"))
+    if looks_remote:
+        print("\nWARNING: the Postgres target does not look local (possible shared/production DB).")
+
+    forced = args.force or os.getenv("CORTEX_RESET_CONFIRM") == "YES"
+    if not forced:
+        print("\nRefusing to run without confirmation.")
+        print("Re-run with --force, or set CORTEX_RESET_CONFIRM=YES, to proceed.")
+        sys.exit(1)
+
+    # Even when forced, a remote-looking target requires a typed confirmation
+    # (unless stdin is not a TTY, e.g. CI, where --force is treated as sufficient).
+    if looks_remote and sys.stdin.isatty():
+        answer = input('\nType "RESET" to confirm destruction of the target above: ').strip()
+        if answer != "RESET":
+            print("Confirmation not received. Aborting.")
+            sys.exit(1)
+
+
 if __name__ == "__main__":
+    _guard()
     print("Starting full database reset...")
     reset_redis()
     reset_neo4j()

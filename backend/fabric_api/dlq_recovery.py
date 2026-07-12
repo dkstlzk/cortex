@@ -8,6 +8,14 @@ from backend.shared.redis_client import ingestion_queue
 
 logger = structlog.get_logger(__name__)
 
+_dlq_http_client: httpx.AsyncClient | None = None
+
+def get_dlq_http_client() -> httpx.AsyncClient:
+    global _dlq_http_client
+    if _dlq_http_client is None:
+        _dlq_http_client = httpx.AsyncClient(timeout=60.0)
+    return _dlq_http_client
+
 async def dlq_recovery_loop():
     """
     Background daemon that periodically checks if the external ML Gateway is healthy.
@@ -25,12 +33,12 @@ async def dlq_recovery_loop():
     while True:
         try:
             # 1. Ping the external gateway
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.get(
-                    f"{settings.LLM_BASE_URL}/models",
-                    headers={"ngrok-skip-browser-warning": "1"}
-                )
-                resp.raise_for_status()
+            client = get_dlq_http_client()
+            resp = await client.get(
+                f"{settings.LLM_BASE_URL}/models",
+                headers={"ngrok-skip-browser-warning": "1"}
+            )
+            resp.raise_for_status()
                 
             # 2. Gateway is healthy! Check for failed jobs.
             failed_job_ids = registry.get_job_ids()

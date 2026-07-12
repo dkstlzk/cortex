@@ -54,39 +54,64 @@ def process_embedding_job(document_id: str) -> dict[str, Any]:
                 repo.db.commit()
                 return {"status": "success", "message": "No chunks to embed"}
                 
+            # 3. Resume / Idempotency Check
+            existing_chunk_ids = qdrant_service.get_existing_chunk_ids(document_id)
+            if existing_chunk_ids:
+                logger.info("Found existing chunks in Qdrant, resuming job", document_id=document_id, existing_count=len(existing_chunk_ids))
+            
+            # Filter out chunks that are already in Qdrant
+            pending_chunks = [c for c in chunks if c["id"] not in existing_chunk_ids]
+            
+            if not pending_chunks:
+                logger.info("All chunks already embedded and indexed", document_id=document_id)
+                time_ms = int((time.time() - start_time) * 1000)
+                repo.mark_embedded(document_id, settings.EMBEDDING_MODEL, datetime.now(timezone.utc))
+                
+                doc = repo.get_by_id(document_id)
+                if doc:
+                    doc.embedding_time_ms = time_ms
+                repo.db.commit()
+                return {
+                    "status": "success",
+                    "document_id": document_id,
+                    "chunk_count": len(chunks),
+                    "time_ms": time_ms
+                }
+                
             # Populate chunk filename if not present
-            for c in chunks:
+            for c in pending_chunks:
                 if "filename" not in c:
                     c["filename"] = doc.filename
                     
-            # 3. Generate Embeddings in Batches
-            texts = [chunk["text"] for chunk in chunks]
-            embeddings = []
+            # 4. Generate Embeddings and Upsert in Batches
+            texts = [chunk["text"] for chunk in pending_chunks]
             batch_size = 32
             
-            for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i:i+batch_size]
-                logger.info("Processing embedding batch", document_id=document_id, batch_start=i, batch_size=len(batch_texts), total_chunks=len(texts))
-                batch_embeddings = embedding_service.embed_batch(batch_texts)
-                embeddings.extend(batch_embeddings)
-                logger.info("Finished embedding batch", document_id=document_id, current_total=len(embeddings))
-            
-            # Transition to EMBEDDED
-            repo.mark_embedded(document_id, settings.EMBEDDING_MODEL, datetime.now(timezone.utc))
-            repo.db.commit()
-            
-            # 4. Upsert to Qdrant (INDEXING)
+            # Mark as indexing immediately since we interleave it
             repo.mark_indexing(document_id)
             repo.db.commit()
             
-            qdrant_service.upsert_chunks(
-                document_id=document_id,
-                chunks=chunks,
-                embeddings=embeddings,
-                embedding_model=settings.EMBEDDING_MODEL
-            )
+            total_processed = 0
             
-            # Transition to EMBEDDED and check state convergence
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i+batch_size]
+                batch_chunks = pending_chunks[i:i+batch_size]
+                
+                logger.info("Processing embedding batch", document_id=document_id, batch_start=i, batch_size=len(batch_texts), total_pending=len(texts))
+                batch_embeddings = embedding_service.embed_batch(batch_texts)
+                
+                # Upsert immediately to save state in Qdrant
+                qdrant_service.upsert_chunks(
+                    document_id=document_id,
+                    chunks=batch_chunks,
+                    embeddings=batch_embeddings,
+                    embedding_model=settings.EMBEDDING_MODEL
+                )
+                
+                total_processed += len(batch_embeddings)
+                logger.info("Finished embedding and indexing batch", document_id=document_id, current_total=total_processed)
+            
+            # 5. Transition to EMBEDDED and check state convergence
             time_ms = int((time.time() - start_time) * 1000)
             repo.mark_embedded(document_id, settings.EMBEDDING_MODEL, datetime.now(timezone.utc))
             

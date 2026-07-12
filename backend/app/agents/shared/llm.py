@@ -13,6 +13,8 @@ from __future__ import annotations
 from typing import AsyncIterator, Dict, List, Optional
 
 from openai import AsyncOpenAI
+import openai
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from backend.shared.config import settings
 
@@ -63,6 +65,12 @@ async def generate_streaming(
         await client.close()
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=10),
+    retry=retry_if_exception_type((openai.APIConnectionError, openai.RateLimitError, openai.APIError, openai.Timeout)),
+    reraise=True
+)
 async def generate(
     messages: List[Dict[str, str]],
     *,

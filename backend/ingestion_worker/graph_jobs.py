@@ -264,12 +264,14 @@ def process_graph_job(document_id: str) -> Dict[str, Any]:
         }
 
     except Exception as exc:
-        # Best-effort: a graph-extraction failure must not fail ingestion overall.
-        # We record the FAILED state so convergence logic doesn't stall,
-        # but the document might still transition to FAILED overall based on convergence logic.
         logger.error("Graph extraction failed", document_id=document_id, error=str(exc), exc_info=True)
         with SessionLocal() as db:
             repo = DocumentRepository(db)
             repo.mark_graph_failed(document_id)
             repo.db.commit()
-        return {"status": "failed", "document_id": document_id, "error": str(exc)}
+            
+        # We MUST re-raise the exception so that RQ registers it as a failed job 
+        # and moves it to the FailedJobRegistry. This allows the DLQ Auto-Recovery 
+        # Daemon to automatically requeue it when the ML Gateway comes back online!
+        from backend.shared.exceptions import IngestionPipelineError
+        raise IngestionPipelineError(f"Graph Extraction failed: {str(exc)}", stage="Graph Extraction") from exc

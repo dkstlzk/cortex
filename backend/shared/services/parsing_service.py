@@ -8,6 +8,7 @@ from dataclasses import dataclass
 # at the module level for parts of the app that don't need it.
 
 from backend.shared.exceptions import IngestionPipelineError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = structlog.get_logger(__name__)
 
@@ -91,16 +92,27 @@ class ParsingService:
                 logger.info("Offloading Docling parsing to remote gateway", remote_url=settings.REMOTE_PARSER_URL)
                 import httpx
                 
-                with open(path, "rb") as f:
-                    files = {"file": (path.name, f, "application/pdf")}
-                    # We give the remote API up to 5 minutes to parse a large document
-                    response = httpx.post(
-                        settings.REMOTE_PARSER_URL,
-                        files=files,
-                        headers={"ngrok-skip-browser-warning": "1"},
-                        timeout=300.0
-                    )
-                response.raise_for_status()
+                @retry(
+                    stop=stop_after_attempt(3),
+                    wait=wait_exponential(multiplier=2, min=4, max=10),
+                    retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
+                    reraise=True
+                )
+                def _do_remote_parse():
+                    logger.info("Executing remote parse request", attempt="auto-retry")
+                    with open(path, "rb") as f:
+                        files = {"file": (path.name, f, "application/pdf")}
+                        # We give the remote API up to 5 minutes to parse a large document
+                        resp = httpx.post(
+                            settings.REMOTE_PARSER_URL,
+                            files=files,
+                            headers={"ngrok-skip-browser-warning": "1"},
+                            timeout=300.0
+                        )
+                    resp.raise_for_status()
+                    return resp
+                
+                response = _do_remote_parse()
                 
                 data = response.json()
                 markdown_content = data["markdown"]

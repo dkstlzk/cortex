@@ -3,6 +3,7 @@ from typing import List
 
 from backend.shared.services.embedding_service.provider import EmbeddingProvider
 from backend.shared.exceptions import InfrastructureError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = structlog.get_logger(__name__)
 
@@ -34,20 +35,30 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             elif not url.endswith("/embeddings"):
                 url = url.rstrip("/") + "/embeddings"
                 
-            response = httpx.post(
-                url,
-                json={
-                    "model": self.model_name,
-                    "input": texts
-                },
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "ngrok-skip-browser-warning": "1"
-                },
-                timeout=120.0 # High timeout per batch
+            @retry(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=2, min=4, max=10),
+                retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
+                reraise=True
             )
-            response.raise_for_status()
+            def _do_post():
+                resp = httpx.post(
+                    url,
+                    json={
+                        "model": self.model_name,
+                        "input": texts
+                    },
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "1"
+                    },
+                    timeout=120.0 # High timeout per batch
+                )
+                resp.raise_for_status()
+                return resp
+                
+            response = _do_post()
             data = response.json()
             
             # Extract floats

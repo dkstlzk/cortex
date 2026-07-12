@@ -17,19 +17,19 @@
 
 Turn scattered industrial documents into a searchable knowledge graph and talk to them using a multi-agent AI copilot with complete citations.
 
- **AMD Developer Hackathon 2026 – Unicorn Track**
+**AMD Developer Hackathon 2026 – Unicorn Track**
 
- **Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)  
- **Demo Video:** *(link)*  
- **Pitch Deck:** *(link)*
+**Live Demo:** [https://cortex-search-ai.vercel.app](https://cortex-search-ai.vercel.app)
+**Demo Video:** *(link)*
+**Pitch Deck:** *(link)*
 
 </div>
 
 ---
 
-##  Why Cortex?
+## Why Cortex?
 
-Traditional RAG retrieves text.  
+Traditional RAG retrieves text.
 **Cortex retrieves knowledge.**
 
 We combine:
@@ -41,7 +41,7 @@ To answer complex questions that no single document contains.
 
 ---
 
-##  Screenshots
+## Screenshots
 
 *(Replace with actual screenshots before submission)*
 
@@ -53,24 +53,27 @@ To answer complex questions that no single document contains.
 
 ---
 
-##  Features
+## Features
 
-- ✅ **Layout-aware PDF parsing**
-- ✅ **Hybrid Retrieval** (Dense + Graph + Lexical)
-- ✅ **Knowledge Graph Construction**
-- ✅ **Multi-Agent Reasoning**
-- ✅ **Streaming Responses**
-- ✅ **Source Citations**
-- ✅ **Industrial Knowledge Graph**
-- ✅ **JWT Authentication**
-- ✅ **Self-Healing Queue**
-- ✅ **Production-grade Backend**
+- **Layout-aware PDF parsing**
+- **Hybrid Retrieval** (Dense + Graph, with an optional Lexical pathway)
+- **Metadata-Aware Reranking** to surface primary sources over secondary references
+- **Knowledge Graph Construction** with open, domain-adaptive entity/relationship extraction
+- **Multi-Agent Reasoning** (LangGraph Supervisor with specialist workers)
+- **Streaming Responses**
+- **Source Citations**
+- **Industrial Knowledge Graph**
+- **JWT Authentication** (JWKS-verified, end to end from frontend login to backend enforcement)
+- **Self-Healing Queue** with automatic Dead Letter Queue recovery
+- **Resumable, Idempotent Ingestion** (embedding jobs recover cleanly from partial failure)
+- **S3-Compatible Object Storage** with local-disk fallback for development
+- **Production-grade Backend**
 
 ---
 
-##  Built on AMD
+## Built on AMD
 
-Embedding, chunking, parsing, generation, retrieval - all AI-related components were offloaded to AMD GPU notebooks and were accessed through ngrok tunnels.
+Embedding, chunking, parsing, generation, and retrieval-time reasoning — all AI-related components are offloaded to AMD GPU notebooks and accessed through ngrok tunnels, with automatic recovery if the tunnel drops mid-job.
 
 | Task | Technology |
 |------|------------|
@@ -85,95 +88,100 @@ Embedding, chunking, parsing, generation, retrieval - all AI-related components 
 - Complete offloading of heavy ML components to dedicated AMD hardware.
 - Ready for secure, on-premise enterprise deployments.
 
-The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are consumed natively by the Cortex backend.
+The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are consumed natively by the Cortex backend. A background recovery daemon polls the gateway and automatically requeues any ingestion jobs that failed while it was unreachable, so a temporary tunnel restart never loses work.
 
 ---
 
-##  Architecture
+## Architecture
 
 ```text
         Next.js (Frontend)
                ↓
-      FastAPI (API Gateway)
+   FastAPI (API Gateway, JWT-authenticated)
                ↓
-    RQ Workers (Async Queue)
+    RQ Workers (Async Queue + DLQ Recovery)
                ↓
-     Hybrid Retrieval Engine
+     Hybrid Retrieval Engine (RRF + Reranking)
                ↓
    Multi-Agent Reasoning (P3)
                ↓
- +--------------------------+
- |  Qdrant | Neo4j | Postgres |
- +--------------------------+
+ +-----------------------------------+
+ | Qdrant | Neo4j | Postgres | S3 |
+ +-----------------------------------+
                ↓
     AMD ROCm + vLLM (Compute)
 ```
 
 ---
 
-##  Data Flow Diagrams
+## Data Flow Diagrams
 
 ### 1. File Upload to Graph Generation (Ingestion)
 
 ```mermaid
 graph TD
-    A[User / Frontend] -->|Uploads PDF| B(FastAPI Gateway)
-    B -->|Saves to Disk| C[(File Storage)]
+    A[User / Frontend] -->|Uploads PDF, JWT-authenticated| B(FastAPI Gateway)
+    B -->|Uploads Artifact| C[(S3 / Object Storage)]
     B -->|Enqueues Job| D[Redis / RQ]
     D -->|Pops Job| E(Ingestion Worker)
     E -->|1. Parse Document| F[IBM Docling / AMD]
     F -->|Parsed Content| E
     E -->|2. Generate Embeddings| G[FastEmbed / AMD]
-    G -->|Embeddings| E
+    G -->|Embeddings, Resumable| E
     E -->|3. Extract Entities| H[vLLM / AMD]
     H -->|Graph Data| E
-    E -->|Store Nodes/Edges| I[(Neo4j)]
+    E -->|Store Nodes/Edges, Batched| I[(Neo4j)]
     E -->|Store Embeddings| J[(Qdrant)]
     E -->|Update Metadata| K[(PostgreSQL)]
+    D -.->|On AMD Gateway Downtime| L(DLQ Recovery Daemon)
+    L -.->|Auto-Requeues Failed Jobs| D
 ```
 
 ### 2. Query Retrieval Pipeline
 
 ```mermaid
 graph TD
-    A[User / Frontend] -->|Asks Question| B(FastAPI Gateway)
+    A[User / Frontend] -->|Asks Question, JWT-authenticated| B(FastAPI Gateway)
     B -->|Query| C(Multi-Agent System)
     C -->|Generate Embedding| D[FastEmbed / AMD]
     C -->|Vector Search| E[(Qdrant)]
     C -->|Graph Traversal| F[(Neo4j)]
     E -->|Vector Results| G(Hybrid Retrieval Engine)
     F -->|Graph Results| G
-    G -->|RRF Fusion & Context| H[Combined Context]
-    H -->|Prompt w/ Context| I[vLLM / AMD]
+    G -->|RRF Fusion| H[Fused Context]
+    H -->|Metadata-Aware Reranking| M[Reranked Context]
+    M -->|Prompt w/ Context| I[vLLM / AMD]
     I -->|Streaming Response| C
     C -->|Streams Answer & Citations| A
 ```
 
 ---
 
-##  Demo Flow
+## Demo Flow
 
 **Upload PDF** ➔ **Graph Builds** ➔ **Ask Question** ➔ **Get Cited Answer** ➔ **Explore Graph**
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer      | Tech            |
 | ---------- | --------------- |
 | **Frontend**   | Next.js 16      |
 | **Backend**    | FastAPI         |
+| **Auth**       | JWT / JWKS      |
 | **Vector DB**  | Qdrant          |
 | **Graph DB**   | Neo4j           |
 | **Metadata**   | PostgreSQL      |
-| **Queue**      | Redis + RQ      |
+| **Object Storage** | S3-Compatible (boto3) |
+| **Queue**      | Redis + RQ (with DLQ recovery) |
 | **AI Compute** | AMD ROCm + vLLM |
 | **OCR**        | IBM Docling     |
 | **Embeddings** | FastEmbed       |
 
 ---
 
-##  Repository Structure
+## Repository Structure
 
 Judges, start here to navigate the codebase:
 
@@ -181,24 +189,27 @@ Judges, start here to navigate the codebase:
 cortex/
 ├── backend/
 │   ├── ingestion_worker/  # P1: Parsing, embedding, and KG extraction
-│   ├── app/retrieval/     # P2: Hybrid Retrieval (Dense, Lexical, Graph)
+│   ├── app/retrieval/     # P2: Hybrid Retrieval (Dense, Lexical, Graph) + Reranking
 │   ├── app/agents/        # P3: LangGraph Multi-Agent System
-│   └── fabric_api/        # FastAPI Application Layer
+│   ├── shared/            # Config, DB clients, JWT verification, object storage
+│   └── fabric_api/        # FastAPI Application Layer + DLQ Recovery Daemon
 ├── frontend/              # Next.js User Interface
-├── scripts/               # Deployment and utility scripts
-├── notebooks/             # AMD AI Notebooks for vLLM deployment
+├── scripts/                # Deployment and utility scripts
+├── *.ipynb                # AMD AI Notebooks for the unified ML gateway
 ├── docs/                  # Architecture & Design Specs
 └── docker-compose.yml     # Local Infrastructure
 ```
 
-###  Where to Look
--  **`backend/ingestion_worker`** → Knowledge Graph Construction
--  **`backend/app/retrieval`** → Hybrid Retrieval Engine & RRF Fusion
--  **`backend/app/agents`** → LangGraph Multi-Agent System
+### Where to Look
+- **`backend/ingestion_worker`** → Knowledge Graph Construction
+- **`backend/app/retrieval`** → Hybrid Retrieval Engine, RRF Fusion, and Reranking
+- **`backend/app/agents`** → LangGraph Multi-Agent System
+- **`backend/shared/security.py`** → JWT/JWKS Authentication
+- **`backend/fabric_api/dlq_recovery.py`** → Self-Healing Queue Recovery
 
 ---
 
-## 💻 Setup Instructions
+## Setup Instructions
 
 ### Prerequisites
 - Python 3.11+
@@ -242,7 +253,7 @@ npm run dev
 
 ---
 
-##  Environment Variables
+## Environment Variables
 
 **Backend (`backend/.env`)**
 | Variable | Description |
@@ -286,7 +297,7 @@ npm run dev
 
 ---
 
-##  Production Deployment
+## Production Deployment
 
 | Service | Hosted On |
 |---------|-----------|
@@ -301,7 +312,7 @@ npm run dev
 
 ---
 
-##  Roadmap
+## Roadmap
 
 - [ ] Kafka Integration for high-throughput ingestion
 - [ ] Comprehensive Observability (Prometheus + OpenTelemetry)

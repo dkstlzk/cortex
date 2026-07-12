@@ -23,7 +23,9 @@ export function CitationChip({ citation }: CitationChipProps) {
         <span className="font-medium">{isUnknown ? 'source pending' : citation.filename}</span>
         <div className="flex gap-2 opacity-75">
           {citation.page_numbers && citation.page_numbers.length > 0 && (
-            <span>Page {citation.page_numbers[0]}</span>
+            <span>
+              Page{citation.page_numbers.length > 1 ? 's' : ''} {citation.page_numbers.join(', ')}
+            </span>
           )}
           {citation.chunk_index !== undefined && (
             <span className="text-[0.6rem]">Chunk {citation.chunk_index}</span>

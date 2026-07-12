@@ -59,13 +59,35 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
         </div>
 
-        {message.citations && message.citations.length > 0 && (
-          <div className={cn('flex flex-wrap gap-1.5', isUser && 'justify-end')}>
-            {message.citations.map((cit, i) => (
-              <CitationChip key={`${cit.doc_id}-${i}`} citation={cit} />
-            ))}
-          </div>
-        )}
+        {message.citations && message.citations.length > 0 && (() => {
+          const groupedMap = new Map<string, any>();
+          
+          message.citations.forEach(cit => {
+            const key = (cit.doc_id && cit.doc_id !== 'unknown') ? cit.doc_id : cit.filename;
+            if (!groupedMap.has(key)) {
+              groupedMap.set(key, { 
+                ...cit, 
+                page_numbers: [...(cit.page_numbers || [])],
+                chunk_index: undefined // Hide specific chunk when aggregating at document level
+              });
+            } else {
+              const existing = groupedMap.get(key);
+              if (cit.page_numbers) {
+                existing.page_numbers = Array.from(new Set([...existing.page_numbers, ...cit.page_numbers])).sort((a, b) => a - b);
+              }
+            }
+          });
+          
+          const uniqueCitations = Array.from(groupedMap.values());
+
+          return (
+            <div className={cn('flex flex-wrap gap-1.5', isUser && 'justify-end')}>
+              {uniqueCitations.map((cit, i) => (
+                <CitationChip key={`${cit.doc_id || cit.filename}-${i}`} citation={cit} />
+              ))}
+            </div>
+          );
+        })()}
 
         {message.agent_trigger && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>

@@ -54,22 +54,30 @@ async def run_query(
             focused_tag=focused_tag,
         )
 
-        context_texts = []
+        # Group chunks by document, preserving the order of the highest-ranked chunk per document
+        doc_groups = {}
         for chunk in retrieval_ctx.chunks:
             filename = chunk.payload.get("filename", "Unknown")
-            page_numbers = chunk.payload.get("page_numbers", [])
-            headings = chunk.payload.get("headings", [])
-            chunk_idx = chunk.payload.get("chunk_index")
-            
-            header = f"Source: {filename}\n"
-            if page_numbers:
-                header += f"Page: {page_numbers[0]}\n"
-            if headings:
-                header += f"Section: {headings[-1]}\n"
-            if chunk_idx is not None:
-                header += f"Chunk: {chunk_idx}\n"
-            
-            context_texts.append(f"{header}\n{chunk.text}")
+            if filename not in doc_groups:
+                doc_groups[filename] = []
+            doc_groups[filename].append(chunk)
+
+        context_texts = []
+        for filename, chunks in doc_groups.items():
+            for chunk in chunks:
+                page_numbers = chunk.payload.get("page_numbers", [])
+                headings = chunk.payload.get("headings", [])
+                chunk_idx = chunk.payload.get("chunk_index")
+                
+                header = f"Source: {filename}\n"
+                if page_numbers:
+                    header += f"Page: {page_numbers[0]}\n"
+                if headings:
+                    header += f"Section: {headings[-1]}\n"
+                if chunk_idx is not None:
+                    header += f"Chunk: {chunk_idx}\n"
+                
+                context_texts.append(f"{header}\n{chunk.text}")
 
         # --- Step 2: LLM Generation — stream tokens immediately ---
         messages = build_copilot_messages(query, context_texts)
@@ -81,8 +89,35 @@ async def run_query(
 
         draft_answer = "".join(draft_parts)
 
-        # --- Step 3: Emit citations from retrieval context ---
+        # --- Step 3: Extract referenced citations ---
+        import re
+        referenced_citations = set()
+        # Parse [Filename, ..., Chunk Y] format
+        for match in re.finditer(r"\[\s*([^,\]]+?)\s*,(?:[^\]]*?)Chunk\s+(\d+)\s*\]", draft_answer, re.IGNORECASE):
+            filename = match.group(1).strip()
+            chunk_idx = int(match.group(2))
+            referenced_citations.add((filename, chunk_idx))
+
+        MAX_FALLBACK_CITATIONS = 4
+        if not referenced_citations:
+            logger.info(
+                "citation_filter_fallback",
+                reason="no_referenced_citations_found",
+                retrieved=len(retrieval_ctx.citations),
+                emitted=min(MAX_FALLBACK_CITATIONS, len(retrieval_ctx.citations)),
+            )
+
+        # --- Step 4: Emit citations from retrieval context ---
+        emitted_count = 0
         for citation in retrieval_ctx.citations:
+            if referenced_citations:
+                if (citation.filename, citation.chunk_index) not in referenced_citations:
+                    continue
+            else:
+                if emitted_count >= MAX_FALLBACK_CITATIONS:
+                    continue
+            
+            emitted_count += 1
             yield emit_citation(
                 doc_id=citation.doc_id,
                 filename=citation.filename,

@@ -5,6 +5,7 @@ from backend.app.retrieval.interfaces import SearchQuery
 from backend.app.retrieval.context import ContextAssembler
 from backend.app.retrieval.pipeline import DefaultRetrievalPipeline
 from backend.app.retrieval.fusion import ReciprocalRankFusion
+from backend.app.retrieval.reranking import MetadataReranker
 from backend.app.retrieval.retrievers.dense import DenseRetriever
 from backend.app.retrieval.retrievers.keyword import KeywordRetriever
 from backend.app.retrieval.retrievers.graph import GraphRetriever
@@ -35,7 +36,8 @@ def get_retrieval_pipeline() -> DefaultRetrievalPipeline:
     return DefaultRetrievalPipeline(
         retrievers=retrievers,
         fusion_strategy=get_fusion_strategy(),
-        context_assembler=get_context_assembler()
+        context_assembler=get_context_assembler(),
+        reranker=MetadataReranker()
     )
 
 # Public retrieval interface consumed by P3.

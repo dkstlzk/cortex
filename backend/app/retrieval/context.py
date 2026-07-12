@@ -45,7 +45,10 @@ async def _formulate_graph_strategy(query: str, history: List[str]) -> dict:
             max_tokens=150
         )
         import json
-        content = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        if content is None:
+            return {"search_terms": [], "relationship_types": []}
+        content = content.strip()
         data = json.loads(content)
         return {
             "search_terms": data.get("search_terms", []),

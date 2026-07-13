@@ -201,7 +201,7 @@ export default function DocumentsPage() {
           <FadeIn delay={0.1}>
             <div className="mb-4 bg-base/50 border border-line rounded-md p-4">
               <label className="block text-sm font-medium text-ink mb-1">Custom ML Gateway URL (Optional)</label>
-              <p className="text-xs text-muted mb-3">Provide a remote gateway url for offloading parsing and embedding tasks. For example, a Colab/Ngrok endpoint: <code className="text-signal bg-signal/10 px-1 py-0.5 rounded">https://my-tunnel.ngrok-free.app</code>.</p>
+              <p className="text-xs text-muted mb-3">Provide a remote gateway url for offloading parsing and embedding tasks. For example, a Colab/Ngrok endpoint (<a href="https://colab.research.google.com/drive/1yeAxOD0O-DGugkl9oqxUaJORqQf_Ke_w?usp=sharing" target="_blank" rel="noreferrer" className="text-signal hover:underline">see example notebook</a>—clone it and add your <code>NGROK_AUTHTOKEN</code> as a secret): <code className="text-signal bg-signal/10 px-1 py-0.5 rounded">https://my-tunnel.ngrok-free.app</code>.</p>
               <input
                 type="url"
                 placeholder="https://..."

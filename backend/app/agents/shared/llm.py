@@ -61,7 +61,7 @@ async def generate_streaming(
                 stream=True,
             )
             break
-        except (openai.APIConnectionError, openai.APIError, openai.Timeout) as exc:
+        except (openai.APIConnectionError, openai.APIError, openai.APITimeoutError) as exc:
             last_exc = exc
             if attempt < 2:
                 import asyncio
@@ -85,7 +85,7 @@ async def generate_streaming(
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=2, min=4, max=10),
-    retry=retry_if_exception_type((openai.APIConnectionError, openai.RateLimitError, openai.APIError, openai.Timeout)),
+    retry=retry_if_exception_type((openai.APIConnectionError, openai.RateLimitError, openai.APIError, openai.APITimeoutError)),
     reraise=True
 )
 async def generate(

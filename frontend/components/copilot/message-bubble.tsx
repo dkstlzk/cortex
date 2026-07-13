@@ -99,6 +99,31 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </Link>
           </motion.div>
         )}
+
+        {message.reasoning_steps && message.reasoning_steps.length > 0 && (
+          <div className="space-y-1 mt-2">
+            {message.reasoning_steps.map((step, i) => (
+              <motion.div key={i} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-xs text-muted flex items-start gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-mint/50 mt-1 shrink-0" />
+                <span className="leading-tight">{step}</span>
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {message.tool_calls && message.tool_calls.length > 0 && (
+          <div className="space-y-1 mt-2">
+            {message.tool_calls.map((call, i) => (
+              <motion.div key={i} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-xs font-mono text-faint flex items-start gap-1.5">
+                <span className="text-signal/70">▶</span>
+                <span className="leading-tight break-all">
+                  {call.name}({JSON.stringify(call.args)})
+                  {call.result ? ` → ${typeof call.result === 'object' ? '{...}' : call.result}` : '...'}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );

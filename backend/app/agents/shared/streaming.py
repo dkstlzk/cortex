@@ -16,6 +16,17 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional, List
 
+__all__ = [
+    "emit_token",
+    "emit_citation",
+    "emit_agent_trigger",
+    "emit_reasoning",
+    "emit_tool_call",
+    "emit_tool_result",
+    "emit_error",
+    "emit_done",
+]
+
 def _format_sse(event: str, data: Dict[str, Any]) -> str:
     """Format a single SSE frame with the given event name and JSON payload."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"

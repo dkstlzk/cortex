@@ -4,8 +4,7 @@
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
-![AMD ROCm](https://img.shields.io/badge/AMD-ROCm-ed1c24.svg)
-![vLLM](https://img.shields.io/badge/vLLM-0.16.0-blueviolet.svg)
+![Groq](https://img.shields.io/badge/Groq-High_Speed_Inference-f55036.svg)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange.svg)
 ![Neo4j](https://img.shields.io/badge/Neo4j-Graph-4581c3.svg)
 ![Qdrant](https://img.shields.io/badge/Qdrant-Vector-ff5252.svg)
@@ -42,38 +41,35 @@ To answer complex questions that no single document contains.
 ## Features
 
 - **Layout-aware PDF parsing**
-- **Hybrid Retrieval** (Dense + Graph, with an optional Lexical pathway)
+- **Hybrid Retrieval** (Dense + Graph + Lexical exact-match pathway)
 - **Metadata-Aware Reranking** to surface primary sources over secondary references
 - **Knowledge Graph Construction** with open, domain-adaptive entity/relationship extraction
 - **Multi-Agent Reasoning** (LangGraph Supervisor with specialist workers)
-- **Streaming Responses**
+- **Streaming Responses** (Robust SSE with agent tracing, reasoning, and tool executions)
 - **Source Citations**
 - **Industrial Knowledge Graph**
 - **Self-Healing Queue** with automatic Dead Letter Queue recovery
 - **Resumable, Idempotent Ingestion** (embedding jobs recover cleanly from partial failure)
 - **S3-Compatible Object Storage** with local-disk fallback for development
-- **Production-grade Backend**
+- **Production-Ready Backend** (Hardened with session continuity, async graceful shutdown, and container healthchecks)
 
 ---
 
-## Built on AMD
+## High-Speed Inference & Flexible ML Architecture
 
-Embedding, chunking, parsing, generation, and retrieval-time reasoning — all AI-related components are offloaded to AMD GPU notebooks and accessed through ngrok tunnels, with automatic recovery if the tunnel drops mid-job.
+Embedding, chunking, parsing, generation, and retrieval-time reasoning are cleanly decoupled. Cortex delegates heavy multi-agent reasoning to high-speed cloud inference providers (like **Groq**) to eliminate network tunnel latency, while keeping document parsing and embeddings flexible (running locally or via dedicated microservices).
 
 | Task | Technology |
 |------|------------|
-| **LLM Inference** | ROCm + vLLM |
+| **LLM Inference** | Groq / OpenAI Compatible API |
 | **OCR / Parsing** | IBM Docling |
 | **Embeddings** | FastEmbed |
-| **GPU Platform** | AMD AI Notebooks |
-| **API Boundary** | OpenAI Compatible |
+| **API Boundary** | Standardized OpenAI Interface |
 
 **Why this matters:**
-- Zero code changes between OpenAI and AMD inference.
-- Complete offloading of heavy ML components to dedicated AMD hardware.
-- Ready for secure, on-premise enterprise deployments.
-
-The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are consumed natively by the Cortex backend. A background recovery daemon polls the gateway and automatically requeues any ingestion jobs that failed while it was unreachable, so a temporary tunnel restart never loses work.
+- **Zero code changes** required to switch between local vLLM, Groq, Fireworks, or OpenAI.
+- **Eliminates TCP/ngrok bottlenecks**, allowing the LangGraph agents to reason and stream at maximum token-per-second limits.
+- **Robust Ingestion:** The background recovery daemon polls endpoints and automatically requeues any ingestion jobs from the Redis Dead Letter Queue if network interruptions occur.
 
 ---
 
@@ -94,7 +90,7 @@ The AMD AI Notebook exposes unified AI endpoints via ngrok tunnels, which are co
  | Qdrant | Neo4j | Postgres | S3 |
  +-----------------------------------+
                ↓
-    AMD ROCm + vLLM (Compute)
+    Groq / Cloud LLM (High-Speed Inference)
 ```
 
 ---
@@ -111,9 +107,9 @@ graph TD
     D -->|Pops Job| E(Ingestion Worker)
     E -->|1. Parse Document| F[IBM Docling / AMD]
     F -->|Parsed Content| E
-    E -->|2. Generate Embeddings| G[FastEmbed / AMD]
+    E -->|2. Generate Embeddings| G[FastEmbed]
     G -->|Embeddings, Resumable| E
-    E -->|3. Extract Entities| H[vLLM / AMD]
+    E -->|3. Extract Entities| H[Groq / Cloud LLM]
     H -->|Graph Data| E
     E -->|Store Nodes/Edges, Batched| I[(Neo4j)]
     E -->|Store Embeddings| J[(Qdrant)]
@@ -135,7 +131,7 @@ graph TD
     F -->|Graph Results| G
     G -->|RRF Fusion| H[Fused Context]
     H -->|Metadata-Aware Reranking| M[Reranked Context]
-    M -->|Prompt w/ Context| I[vLLM / AMD]
+    M -->|Prompt w/ Context| I[Groq / Cloud LLM]
     I -->|Streaming Response| C
     C -->|Streams Answer & Citations| A
 ```
@@ -159,7 +155,7 @@ graph TD
 | **Metadata**   | PostgreSQL      |
 | **Object Storage** | S3-Compatible (boto3) |
 | **Queue**      | Redis + RQ (with DLQ recovery) |
-| **AI Compute** | AMD ROCm + vLLM |
+| **AI Compute** | Groq / Any OpenAI-Compatible API |
 | **OCR**        | IBM Docling     |
 | **Embeddings** | FastEmbed       |
 
@@ -248,9 +244,9 @@ npm run dev
 | `EMBEDDING_MODEL_ENDPOINT` | Embedding model API endpoint | (AMD AI Notebook tunneled via ngrok)
 | `FAST_MODEL` | Lightweight LLM used for fast responses |
 | `FAST_MODEL_API_KEY` | API key for the fast LLM |
-| `FAST_MODEL_BASE_URL` | Base URL of the fast LLM provider | (AMD AI Notebook tunneled via ngrok)
+| `FAST_MODEL_BASE_URL` | Base URL of the fast LLM provider | (e.g. Groq, Fireworks, OpenAI)
 | `LLM_API_KEY` | API key for the primary LLM |
-| `LLM_BASE_URL` | Base URL of the primary LLM provider | (AMD AI Notebook tunneled via ngrok)
+| `LLM_BASE_URL` | Base URL of the primary LLM provider | (e.g. Groq, Fireworks, OpenAI)
 | `LLM_MODEL` | Primary LLM model name | 
 | `NEO4J_PASSWORD` | Neo4j database password |
 | `NEO4J_URI` | Graph database connection URI |
@@ -260,7 +256,7 @@ npm run dev
 | `QDRANT_COLLECTION` | Qdrant collection name |
 | `QDRANT_URL` | Qdrant server URL |
 | `REDIS_URL` | Redis connection URL |
-| `REMOTE_PARSER_URL` | Remote Docling parser endpoint | (AMD AI Notebook tunneled via ngrok)
+| `REMOTE_PARSER_URL` | Remote Docling parser endpoint | (Optional, for delegated extraction)
 | `S3_ACCESS_KEY_ID` | S3-compatible storage access key |
 | `S3_BUCKET_NAME` | S3 bucket name |
 | `S3_ENDPOINT_URL` | S3-compatible storage endpoint |
@@ -286,7 +282,8 @@ npm run dev
 |---------|-----------|
 | **Frontend** | Vercel |
 | **Backend API** | Render |
-| **ML Gateway (Inclunding parsing and embedding)** | AMD AI Notebooks |
+| **LLM Inference** | Groq Cloud API |
+| **ML Gateway (Parsing & Embeds)** | Render / Local Container |
 | **Vector DB** | Qdrant Cloud |
 | **Graph DB** | Neo4j AuraDB |
 | **Relational DB** | Neon Postgres |

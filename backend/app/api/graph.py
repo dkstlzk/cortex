@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 
-from backend.shared.neo4j_client import neo4j_driver
+from backend.shared.neo4j_client import get_neo4j_async
 from backend.app.schemas.graph import GraphNode, GraphEdge, GraphResponse
 from backend.app.agents.shared.logging import get_logger, log_error
 
@@ -79,7 +79,8 @@ async def get_graph(
     """
 
     try:
-        async with neo4j_driver.session() as session:
+        driver = get_neo4j_async()
+        async with driver.session() as session:
             # Check if the requested tag exists
             check_result = await session.run("MATCH (n {tag: $tag}) RETURN count(n) AS cnt", tag=tag)
             record = await check_result.single()

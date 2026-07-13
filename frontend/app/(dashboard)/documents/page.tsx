@@ -51,8 +51,21 @@ interface UploadedFile {
 export default function DocumentsPage() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [activeMlGateway, setActiveMlGateway] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { hasPermission } = useAuth();
+
+  useEffect(() => {
+    const savedGateway = localStorage.getItem('cortex_ml_gateway');
+    if (savedGateway) {
+      setActiveMlGateway(savedGateway);
+    }
+  }, []);
+
+  const handleGatewayChange = (val: string) => {
+    setActiveMlGateway(val);
+    localStorage.setItem('cortex_ml_gateway', val);
+  };
 
   const mounted = useRef(true);
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
@@ -134,7 +147,7 @@ export default function DocumentsPage() {
     setFiles((prev) => [...prev, { id, name: file.name, size: file.size, status: 'uploading' }]);
 
     try {
-      const result = await uploadDocument(file);
+      const result = await uploadDocument(file, activeMlGateway || undefined);
       patch(id, { status: 'processing', documentId: result.document_id, stage: result.status || 'UPLOADED' });
       pollStatus(id, result.document_id);
     } catch (err) {
@@ -150,7 +163,7 @@ export default function DocumentsPage() {
   const handleRetry = async (id: string, documentId: string) => {
     patch(id, { status: 'processing', error: undefined, stage: 'QUEUED' });
     try {
-      await retryDocument(documentId);
+      await retryDocument(documentId, activeMlGateway || undefined);
       pollStatus(id, documentId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Retry failed';
@@ -186,6 +199,18 @@ export default function DocumentsPage() {
 
         {hasPermission('documents:upload') && (
           <FadeIn delay={0.1}>
+            <div className="mb-4 bg-base/50 border border-line rounded-md p-4">
+              <label className="block text-sm font-medium text-ink mb-1">Custom ML Gateway URL (Optional)</label>
+              <p className="text-xs text-muted mb-3">Provide a remote gateway url for offloading parsing and embedding tasks. For example, a Colab/Ngrok endpoint: <code className="text-signal bg-signal/10 px-1 py-0.5 rounded">https://my-tunnel.ngrok-free.app</code>.</p>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={activeMlGateway}
+                onChange={(e) => handleGatewayChange(e.target.value)}
+                className="w-full sm:w-2/3 md:w-1/2 bg-panel border border-line rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:border-signal focus:ring-1 focus:ring-signal"
+              />
+            </div>
+            
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}

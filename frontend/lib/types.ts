@@ -55,6 +55,7 @@ export interface CopilotMessage {
   citations?: Citation[];
   agent_trigger?: AgentTrigger;
   reasoning_steps?: string[];
+  tool_calls?: { name: string; args: Record<string, unknown>; result?: unknown }[];
   timestamp: number;
   streaming?: boolean;
 }

@@ -20,12 +20,13 @@ class MetadataReranker:
     HEADING_BONUS = 0.003
     EXACT_ENTITY_BONUS = 0.002
 
-    def _normalize(self, text: str) -> str:
+    def _normalize(self, text: str, is_filename: bool = False) -> str:
         """Strip non-alphanumeric characters and lowercase for robust matching."""
         if not text:
             return ""
         # Remove extension if it's a filename
-        text = text.rsplit('.', 1)[0]
+        if is_filename:
+            text = text.rsplit('.', 1)[0]
         return re.sub(r'[^a-z0-9]', '', text.lower())
 
     def rerank(self, chunks: List[Chunk], query: SearchQuery, context: TraversalContext) -> List[Chunk]:
@@ -52,13 +53,16 @@ class MetadataReranker:
         if not normalized_entities:
             return chunks
 
+        total_bonus_applied = 0.0
+        chunks_boosted = 0
+
         for chunk in chunks:
             original_score = chunk.score
             bonus = 0.0
             payload = chunk.payload
             
             filename = payload.get("filename", "")
-            norm_filename = self._normalize(filename)
+            norm_filename = self._normalize(filename, is_filename=True)
             
             headings = payload.get("headings", [])
             norm_headings = [self._normalize(h) for h in headings]
@@ -70,7 +74,7 @@ class MetadataReranker:
                     continue
                 
                 # 1. Filename Bonus
-                if entity in norm_filename or norm_filename in entity:
+                if norm_filename and (entity in norm_filename or norm_filename in entity):
                     bonus += self.FILENAME_BONUS
                 
                 # 2. Heading Bonus
@@ -90,15 +94,20 @@ class MetadataReranker:
             if bonus > 0:
                 capped_bonus = min(bonus, self.MAX_METADATA_BONUS)
                 chunk.score += capped_bonus
+                total_bonus_applied += capped_bonus
+                chunks_boosted += 1
 
-            logger.info(
-                "metadata_rerank",
+            logger.debug(
+                "metadata_rerank_chunk",
                 filename=chunk.payload.get("filename"),
                 original_score=original_score,
                 bonus=bonus,
                 capped_bonus=min(bonus, self.MAX_METADATA_BONUS) if bonus > 0 else 0.0,
                 final_score=chunk.score,
             )
+
+        if chunks_boosted > 0:
+            logger.info("metadata_rerank_summary", chunks_boosted=chunks_boosted, total_bonus=total_bonus_applied)
 
         # Re-sort descending by the new boosted score
         chunks.sort(key=lambda x: -x.score)

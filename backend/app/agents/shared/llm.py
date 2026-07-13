@@ -12,28 +12,22 @@ from __future__ import annotations
 
 from typing import AsyncIterator, Dict, List, Optional
 
-from openai import AsyncOpenAI
 import openai
+from openai import AsyncOpenAI
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from backend.shared.config import settings
 
-LLM_MODEL = settings.LLM_MODEL
-_client: Optional[AsyncOpenAI] = None
 
-def get_client() -> AsyncOpenAI:
-    """Return a global singleton client to maintain connection pools and Keep-Alive."""
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(
-            api_key=settings.llm_api_key or "dummy",
-            max_retries=settings.LLM_MAX_RETRIES,
-            timeout=httpx.Timeout(settings.LLM_TIMEOUT, connect=60.0),
-            default_headers={"ngrok-skip-browser-warning": "1"},
-            **({"base_url": settings.LLM_BASE_URL} if settings.LLM_BASE_URL else {}),
-        )
-    return _client
+from backend.shared.llm_clients import get_llm_client
+
+def get_client(base_url_override: str | None = None) -> AsyncOpenAI:
+    """Return a shared client to maintain connection pools and Keep-Alive."""
+    return get_llm_client(
+        api_key=settings.llm_api_key,
+        base_url=base_url_override or settings.LLM_BASE_URL
+    )
 
 
 async def generate_streaming(
@@ -48,17 +42,37 @@ async def generate_streaming(
 
     Each yielded string is a text delta from the model. The caller is
     responsible for wrapping these into SSE events via shared/streaming.py.
+
+    The initial connection is retried (up to 3 attempts with exponential
+    backoff) to survive transient tunnel/network failures. Once the stream
+    is established, iteration proceeds without retries.
     """
     client = get_client()
-    response = await client.chat.completions.create(
-        model=model or LLM_MODEL,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
+
+    # Retry the initial connection with exponential backoff
+    last_exc: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            response = await client.chat.completions.create(
+                model=model or settings.LLM_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            break
+        except (openai.APIConnectionError, openai.APIError, openai.Timeout) as exc:
+            last_exc = exc
+            if attempt < 2:
+                import asyncio
+                await asyncio.sleep(2 ** (attempt + 1))
+    else:
+        raise last_exc  # type: ignore[misc]
+
     async for chunk in response:
-        delta = chunk.choices[0].delta if chunk.choices else None
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
         
         # Note: Some models (e.g., Fireworks gpt-oss-120b) generate reasoning_content 
         # and do not support disabling it via API parameters (like thinking=false).
@@ -81,6 +95,7 @@ async def generate(
     temperature: float = settings.LLM_TEMPERATURE,
     max_tokens: int = 1024,
     response_format: Optional[Dict[str, str]] = None,
+    base_url_override: str | None = None,
 ) -> str:
     """
     Non-streaming LLM call. Returns the complete response text.
@@ -92,9 +107,9 @@ async def generate(
     if response_format:
         kwargs["response_format"] = response_format
         
-    client = get_client()
+    client = get_client(base_url_override=base_url_override)
     response = await client.chat.completions.create(
-        model=model or LLM_MODEL,
+        model=model or settings.LLM_MODEL,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,

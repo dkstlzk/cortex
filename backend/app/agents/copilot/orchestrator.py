@@ -89,14 +89,31 @@ async def run_query(
 
         draft_answer = "".join(draft_parts)
 
+        # Persist the current exchange to session history for continuity
+        await _persist_session_history(session_id, query, draft_answer)
+
         # --- Step 3: Extract referenced citations ---
         import re
         referenced_citations = set()
-        # Parse [Filename, ..., Chunk Y] format
-        for match in re.finditer(r"\[\s*([^,\]]+?)\s*,(?:[^\]]*?)Chunk\s+(\d+)\s*\]", draft_answer, re.IGNORECASE):
-            filename = match.group(1).strip()
-            chunk_idx = int(match.group(2))
-            referenced_citations.add((filename, chunk_idx))
+        # Parse [Filename, ..., Chunk Y] format in a robust way
+        for bracket_content in re.findall(r"\[(.*?)\]", draft_answer):
+            chunk_match = re.search(r"chunk\s*(\d+)", bracket_content, re.IGNORECASE)
+            if not chunk_match:
+                continue
+            chunk_idx = int(chunk_match.group(1))
+            
+            parts = [p.strip() for p in bracket_content.split(",")]
+            filename = ""
+            # Try to find a part with a file extension, otherwise use the first part
+            for p in parts:
+                if "." in p and len(p.split(".")[-1]) in (2, 3, 4):
+                    filename = p
+                    break
+            if not filename and parts:
+                filename = parts[0]
+                
+            if filename:
+                referenced_citations.add((filename, chunk_idx))
 
         MAX_FALLBACK_CITATIONS = 4
         if not referenced_citations:
@@ -162,22 +179,31 @@ async def run_query(
         yield emit_done(answer_id)
 
 
+from backend.shared.query_classification import classify_query_heuristic
+
 def _classify_query_heuristic(query: str) -> QueryType:
     """
     Fast heuristic query classification used before retrieval.
-
-    This mirrors the logic in backend/app/retrieval/context.py but is
-    duplicated here intentionally: the Copilot needs a QueryType to call
-    retrieve(), and importing classify_query from P2's context module
-    would violate the P2→P3 boundary (it is internal to P2).
     """
-    q = query.lower()
-    if any(kw in q for kw in ("why", "keeps failing", "root cause")):
-        return QueryType.DIAGNOSTIC
-    if any(kw in q for kw in ("how do i", "steps to")):
-        return QueryType.PROCEDURAL
-    if any(kw in q for kw in ("which", "compatible", "compare")):
-        return QueryType.OPEN
-    if any(kw in q for kw in ("what", "when")):
-        return QueryType.FACTUAL
-    return QueryType.OPEN
+    return classify_query_heuristic(query) or QueryType.OPEN
+
+
+async def _persist_session_history(session_id: str, query: str, answer: str) -> None:
+    """Persist the current query/answer pair to Redis session history.
+
+    Best-effort: a failure to write history should never break the response
+    stream.  The history list is capped at 20 entries to bound memory.
+    """
+    from backend.shared.redis_client import redis_conn
+    import asyncio
+
+    key = f"session:{session_id}:history"
+    try:
+        await asyncio.to_thread(redis_conn.rpush, key, query)
+        await asyncio.to_thread(redis_conn.rpush, key, answer)
+        # Keep the list bounded so long sessions don't leak memory
+        await asyncio.to_thread(redis_conn.ltrim, key, -20, -1)
+        # Set a 24-hour TTL so stale sessions expire
+        await asyncio.to_thread(redis_conn.expire, key, 86400)
+    except Exception:
+        logger.warning("session_history_persist_failed", session_id=session_id, exc_info=True)
